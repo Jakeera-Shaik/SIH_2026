@@ -1,8 +1,9 @@
 # ================================
 # Node / React / Vite
 # ================================
-
+frontend/node_modules/
 node_modules/
+frontend/dist/
 dist/
 dist-ssr/
 *.local
@@ -14,65 +15,51 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # ================================
-# Spring Boot / Java
+# Spring Boot / Java / Maven
 # ================================
-
 backend/target/
 target/
-
 *.class
 *.jar
 *.war
 *.ear
 
 # ================================
-# Python
+# Python / FastAPI
 # ================================
-
 ai-service/venv/
 venv/
 .venv/
-
 __pycache__/
 *.py[cod]
 *$py.class
-
 .pytest_cache/
 .mypy_cache/
 
 # ================================
 # Environment / Secrets
 # ================================
-
 .env
 .env.*
 !.env.example
 
 # ================================
-# IDE
+# IDE & System
 # ================================
-
 .vscode/*
+!.vscode/settings.json
 !.vscode/extensions.json
-
 .idea/
 *.suo
 *.ntvs*
 *.njsproj
-*.njsproj
 *.sln
 *.sw?
-
-# ================================
-# OS
-# ================================
-
 .DS_Store
 Thumbs.db
 
 # ================================
 # Logs
 # ================================
-
 logs/
 *.log
