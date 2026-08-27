@@ -1,0 +1,20 @@
+[
+  {
+    "id": "crop-lot-1787844078465",
+    "farmerId": "f-shaik",
+    "farmerName": "Shaik Shakeera",
+    "crop": "Paddy",
+    "variety": "Standard",
+    "quantityKg": 1500,
+    "availableQty": "1500 kg (15 Quintals)",
+    "location": "Amravati",
+    "expectedPrice": 4150,
+    "harvestDate": "2026-08-27",
+    "status": "Active",
+    "mobile": "+91 98480 12345",
+    "distanceKm": 15,
+    "rating": 5,
+    "qualityGrade": "Grade A Premium",
+    "active": true
+  }
+]

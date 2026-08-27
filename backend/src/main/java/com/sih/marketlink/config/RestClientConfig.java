@@ -21,7 +21,7 @@ public class RestClientConfig {
     private int readTimeoutMs;
 
     @Bean
-    public RestClient aiServiceClient() {
+    public RestClient aiRestClient() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
         factory.setReadTimeout(Duration.ofMillis(readTimeoutMs));

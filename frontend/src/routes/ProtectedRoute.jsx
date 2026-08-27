@@ -8,7 +8,7 @@ export const ProtectedRoute = ({ children, requiredRole }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <LoadingSpinner message="Verifying authentication session..." />
       </div>
     );
@@ -19,7 +19,7 @@ export const ProtectedRoute = ({ children, requiredRole }) => {
   }
 
   if (requiredRole && role !== requiredRole) {
-    return <Navigate to={role === 'buyer' ? '/buyer/dashboard' : '/farmer/dashboard'} replace />;
+    return <Navigate to={role === 'mandi' ? '/mandi/dashboard' : (role === 'buyer' ? '/buyer/dashboard' : '/farmer/dashboard')} replace />;
   }
 
   return children;

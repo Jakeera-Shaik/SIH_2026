@@ -3,16 +3,16 @@ import { Inbox, RotateCcw } from 'lucide-react';
 
 export const EmptyState = ({ title = 'No results found', description = 'Try adjusting your search query or filters.', onRetry }) => {
   return (
-    <div className="flex flex-col items-center justify-center p-12 text-center bg-slate-900/50 border border-slate-800 rounded-2xl">
-      <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
+    <div className="flex flex-col items-center justify-center p-12 text-center bg-white border border-slate-200/80 rounded-2xl shadow-xs">
+      <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 mb-4">
         <Inbox className="w-7 h-7" />
       </div>
-      <h3 className="text-lg font-semibold text-slate-200 mb-1">{title}</h3>
-      <p className="text-sm text-slate-400 max-w-sm mb-6">{description}</p>
+      <h3 className="text-lg font-bold text-slate-900 mb-1">{title}</h3>
+      <p className="text-sm text-slate-500 max-w-sm mb-6 font-medium">{description}</p>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+          className="inline-flex items-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm font-bold px-4 py-2 rounded-xl transition-colors border border-emerald-200"
         >
           <RotateCcw className="w-4 h-4" />
           Reset Filters

@@ -1,60 +1,157 @@
 import apiClient, { USE_MOCK } from './api';
-import { MOCK_BUYERS, MOCK_BUYER_REQUIREMENTS, MOCK_MATCHING_FARMERS } from './mockData';
+import liveDataStore from './liveDataStore';
+import marketService from './marketService';
+
+const VERIFIED_NETWORK_MANDIS = [
+  {
+    id: 'mandi-net-2',
+    mandiId: 'm-2',
+    companyName: 'Nashik APMC (Dindori Road)',
+    contactPerson: 'Shri S. K. Gaikwad (APMC Secretary)',
+    verified: true,
+    cropRequired: 'Paddy',
+    variety: 'Standard',
+    quantityRequired: '150 Quintals',
+    offerPrice: 4170,
+    distanceKm: 12,
+    location: 'Nashik / Dindori Hub',
+    rating: 4.9,
+    matchPercentage: 99,
+    loginEmail: 'nashik@gmail.com',
+    terms: 'Government APMC Auction Guarantee • Direct Gate Payment'
+  },
+  {
+    id: 'mandi-net-6',
+    mandiId: 'm-6',
+    companyName: 'Amravati APMC Main Yard',
+    contactPerson: 'Shri R. N. Deshmukh (Procurement Officer)',
+    verified: true,
+    cropRequired: 'Paddy',
+    variety: 'Standard',
+    quantityRequired: '200 Quintals',
+    offerPrice: 4170,
+    distanceKm: 8,
+    location: 'Amravati Hub',
+    rating: 4.9,
+    matchPercentage: 99,
+    loginEmail: 'amravati@gmail.com',
+    terms: 'Instant Gate Settlement • Dynamic Freight Refund'
+  },
+  {
+    id: 'mandi-net-3',
+    mandiId: 'm-3',
+    companyName: 'Pimplegaon Baswant APMC',
+    contactPerson: 'Shri K. T. Jadhav (Procurement Officer)',
+    verified: true,
+    cropRequired: 'Maize',
+    variety: 'Yellow Hybrid',
+    quantityRequired: '120 Quintals',
+    offerPrice: 3354,
+    distanceKm: 15,
+    location: 'Pimplegaon Hub',
+    rating: 4.8,
+    matchPercentage: 98,
+    loginEmail: 'pimplegaon@gmail.com',
+    terms: 'Direct Gate Weighment • Instant Settlement'
+  },
+  {
+    id: 'mandi-net-1',
+    mandiId: 'm-1',
+    companyName: 'Lasalgaon APMC (Asia\'s Largest Mandi)',
+    contactPerson: 'Shri D. B. Patil (Yard In-charge)',
+    verified: true,
+    cropRequired: 'Maize',
+    variety: 'Yellow Hybrid',
+    quantityRequired: '150 Quintals',
+    offerPrice: 3280,
+    distanceKm: 18,
+    location: 'Nashik / Lasalgaon',
+    rating: 4.9,
+    matchPercentage: 97,
+    loginEmail: 'lasalgaon@gmail.com',
+    terms: 'Daily APMC Agmarknet Rates • 2-Day Formalities Window'
+  },
+  {
+    id: 'mandi-net-4',
+    mandiId: 'm-4',
+    companyName: 'Pune APMC (Gultekdi Market Yard)',
+    contactPerson: 'Shri V. R. Shinde (APMC Yard Manager)',
+    verified: true,
+    cropRequired: 'Maize',
+    variety: 'Yellow Hybrid',
+    quantityRequired: '100 Quintals',
+    offerPrice: 2787,
+    distanceKm: 25,
+    location: 'Pune / Gultekdi Hub',
+    rating: 4.9,
+    matchPercentage: 96,
+    loginEmail: 'pune@gmail.com',
+    terms: 'Government APMC Auction Guarantee • 2-Day Formalities Window'
+  },
+  {
+    id: 'mandi-net-5',
+    mandiId: 'm-5',
+    companyName: 'Mumbai Vashi APMC (Terminal Wholesale)',
+    contactPerson: 'Shri A. P. More (General Manager)',
+    verified: true,
+    cropRequired: 'Maize',
+    variety: 'Yellow Hybrid',
+    quantityRequired: '80 Quintals',
+    offerPrice: 3150,
+    distanceKm: 42,
+    location: 'Thane / Vashi Terminal',
+    rating: 4.7,
+    matchPercentage: 95,
+    loginEmail: 'vashi@gmail.com',
+    terms: 'Terminal Market Guarantee • Direct Cash/RTGS'
+  }
+];
 
 export const buyerService = {
-  getMatchingBuyers: async (filters = {}) => {
-    if (USE_MOCK) {
-      await new Promise((res) => setTimeout(res, 300));
-      let buyers = [...MOCK_BUYERS];
-      if (filters.crop && filters.crop !== 'All') {
-        buyers = buyers.filter((b) => b.cropRequired.toLowerCase().includes(filters.crop.toLowerCase()));
-      }
-      if (filters.minPrice) {
-        buyers = buyers.filter((b) => b.offerPrice >= Number(filters.minPrice));
-      }
-      return buyers;
-    }
-    return apiClient.get('/buyers/matching', { params: filters });
-  },
-
-  getBuyerById: async (buyerId) => {
+  getRequirements: async (filters = {}) => {
     if (USE_MOCK) {
       await new Promise((res) => setTimeout(res, 200));
-      const buyer = MOCK_BUYERS.find((b) => b.id === buyerId) || MOCK_BUYERS[0];
-      return buyer;
+      return liveDataStore.getBuyerRequirements();
     }
-    return apiClient.get(`/buyers/${buyerId}`);
+    return apiClient.get('/buyer/requirements', { params: filters });
   },
 
-  getRequirements: async () => {
+  getMatchingBuyers: async (params = {}) => {
     if (USE_MOCK) {
-      await new Promise((res) => setTimeout(res, 300));
-      return MOCK_BUYER_REQUIREMENTS;
-    }
-    return apiClient.get('/buyer/requirements');
-  },
+      await new Promise((res) => setTimeout(res, 200));
+      const cropName = params.crop || 'Maize';
 
-  createRequirement: async (requirementData) => {
-    if (USE_MOCK) {
-      await new Promise((res) => setTimeout(res, 400));
-      const newReq = {
-        id: 'req-' + Date.now(),
-        ...requirementData,
-        status: 'Active',
-        matchingFarmersCount: 5
-      };
-      MOCK_BUYER_REQUIREMENTS.unshift(newReq);
-      return newReq;
+      const marketsRes = await marketService.getCurrentPrices({ crop: cropName });
+      const rawMarkets = marketsRes.data || [];
+
+      const networkMatches = VERIFIED_NETWORK_MANDIS.map((m) => {
+        const matchedMarket = rawMarkets.find((rm) => rm.id === m.mandiId || rm.name.includes(m.companyName.split('(')[0].trim()));
+        return {
+          ...m,
+          cropRequired: cropName !== 'All' ? cropName : m.cropRequired,
+          offerPrice: matchedMarket ? matchedMarket.modalPrice : m.offerPrice
+        };
+      });
+
+      return networkMatches;
     }
-    return apiClient.post('/buyer/requirements', requirementData);
+    return apiClient.get('/buyer/matches', { params });
   },
 
   getFarmerMatches: async () => {
     if (USE_MOCK) {
-      await new Promise((res) => setTimeout(res, 300));
-      return MOCK_MATCHING_FARMERS;
+      await new Promise((res) => setTimeout(res, 200));
+      return liveDataStore.getMatchingFarmersForBuyer();
     }
-    return apiClient.get('/buyer/matches');
+    return apiClient.get('/buyer/farmer-matches');
+  },
+
+  createRequirement: async (requirementData) => {
+    if (USE_MOCK) {
+      await new Promise((res) => setTimeout(res, 200));
+      return liveDataStore.addBuyerRequirement(requirementData);
+    }
+    return apiClient.post('/buyer/requirements', requirementData);
   }
 };
 

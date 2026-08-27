@@ -125,10 +125,10 @@ public class AuthService {
 
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmailOrMobile(request.getEmailOrMobile(), request.getEmailOrMobile())
-                .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
+                .orElseThrow(() -> new UnauthorizedException("User not found. Please register first."));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new UnauthorizedException("Invalid credentials");
+            throw new UnauthorizedException("Incorrect password. Please verify your credentials.");
         }
 
         authenticationManager.authenticate(

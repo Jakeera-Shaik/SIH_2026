@@ -3,25 +3,19 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Store,
-  TrendingUp,
-  Sparkles,
-  Calculator,
   Users,
-  Handshake,
   User,
   PlusCircle,
-  Target
+  Target,
+  Handshake,
+  Building2
 } from 'lucide-react';
 
 export const Sidebar = ({ role = 'farmer' }) => {
   const farmerLinks = [
     { to: '/farmer/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/farmer/markets', label: 'Mandi Prices', icon: Store },
-    { to: '/farmer/prices', label: 'Price Trends', icon: TrendingUp },
-    { to: '/farmer/recommendations', label: 'Best Market AI', icon: Sparkles },
-    { to: '/farmer/profit-calculator', label: 'Profit Calculator', icon: Calculator },
-    { to: '/farmer/buyers', label: 'Buyer Marketplace', icon: Users },
-    { to: '/farmer/offers', label: 'My Offers', icon: Handshake },
+    { to: '/farmer/markets', label: 'Mandi Intelligence', icon: Store },
+    { to: '/farmer/buyers', label: 'My Offers & Negotiations', icon: Handshake },
     { to: '/farmer/profile', label: 'My Profile', icon: User },
   ];
 
@@ -34,14 +28,22 @@ export const Sidebar = ({ role = 'farmer' }) => {
     { to: '/buyer/profile', label: 'Company Profile', icon: User },
   ];
 
-  const links = role === 'buyer' ? buyerLinks : farmerLinks;
+  const mandiLinks = [
+    { to: '/mandi/dashboard', label: 'Mandi Dashboard', icon: LayoutDashboard },
+    { to: '/mandi/rates', label: 'Live Yard Rates', icon: Store },
+    { to: '/mandi/profile', label: 'Yard Profile', icon: User },
+  ];
+
+  const links = role === 'mandi' ? mandiLinks : (role === 'buyer' ? buyerLinks : farmerLinks);
+  const portalName = role === 'mandi' ? 'APMC Mandi Portal' : (role === 'buyer' ? 'Buyer Portal' : 'Farmer Portal');
 
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 hidden md:flex flex-col min-h-[calc(100vh-4rem)] p-4">
-      <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold px-3 mb-3">
-        {role === 'buyer' ? 'Buyer Portal' : 'Farmer Portal'}
+    <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col min-h-[calc(100vh-4rem)] p-4 shadow-xs">
+      <div className="text-xs uppercase tracking-wider text-emerald-800 font-bold px-3 mb-3 flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+        {portalName}
       </div>
-      <nav className="space-y-1">
+      <nav className="space-y-1.5">
         {links.map((link) => {
           const Icon = link.icon;
           return (
@@ -49,10 +51,10 @@ export const Sidebar = ({ role = 'farmer' }) => {
               key={link.to}
               to={link.to}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-sm transition-all ${
+                `flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
                   isActive
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                    ? 'bg-emerald-50 text-emerald-700 border-l-4 border-emerald-600 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
                 }`
               }
             >

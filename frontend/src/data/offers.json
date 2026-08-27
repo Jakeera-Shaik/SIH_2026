@@ -1,0 +1,69 @@
+[
+  {
+    "id": "off-flowa-1787843996907",
+    "buyerId": "m-nashik",
+    "buyerName": "Nashik APMC (Dindori Road)",
+    "loginEmail": "nashik@gmail.com",
+    "farmerId": "f-shaik",
+    "farmerName": "Shaik Shakeera",
+    "farmerEmail": "shaikshakeera7864@gmail.com",
+    "crop": "Paddy",
+    "quantity": "1500 kg (15.0 Quintals)",
+    "offeredPricePerQuintal": 4170,
+    "totalValue": 62550,
+    "netReturn": 60686,
+    "status": "Completed",
+    "type": "sent",
+    "createdDate": "2026-08-27",
+    "notes": "Farmer consignment request submitted for Paddy lot at ₹4,170/q.",
+    "discussion": [
+      {
+        "id": "msg-1",
+        "senderName": "Shaik Shakeera",
+        "senderRole": "farmer",
+        "text": "Offer initiated for Paddy lot at ₹4,170/q.",
+        "timestamp": "08:45 PM"
+      },
+      {
+        "id": "msg-2",
+        "senderName": "Nashik APMC (Dindori Road)",
+        "senderRole": "mandi",
+        "text": "Consignment request accepted by Nashik APMC (Dindori Road). Escrow funds committed. Please dispatch freight transport.",
+        "timestamp": "08:46 PM"
+      }
+    ],
+    "payoutReleased": 60686,
+    "completedDate": "2026-08-27"
+  },
+  {
+    "id": "off-flowb-1787843996920",
+    "buyerId": "m-nashik",
+    "buyerName": "Nashik APMC (Dindori Road)",
+    "loginEmail": "nashik@gmail.com",
+    "farmerId": "f-shaik",
+    "farmerName": "Shaik Shakeera",
+    "farmerEmail": "shaikshakeera7864@gmail.com",
+    "crop": "Cotton",
+    "quantity": "1500 kg (15 Quintals)",
+    "offeredPricePerQuintal": 6900,
+    "totalValue": 103500,
+    "netReturn": 100305,
+    "status": "Received",
+    "type": "received",
+    "createdDate": "2026-08-27",
+    "notes": "Nashik APMC (Dindori Road) issued purchase offer for your Cotton lot at ₹6,900/q."
+  },
+  {
+    "id": "off-reject-1787843996922",
+    "buyerId": "m-nashik",
+    "buyerName": "Nashik APMC (Dindori Road)",
+    "loginEmail": "nashik@gmail.com",
+    "farmerId": "f-shaik",
+    "farmerName": "Shaik Shakeera",
+    "crop": "Chilli",
+    "quantity": "1000 kg",
+    "offeredPricePerQuintal": 18500,
+    "status": "Declined (Price Exceeds Baseline Budget)",
+    "rejectionReason": "Requested price of ₹18,500/q exceeds APMC procurement budget for Grade A Chilli."
+  }
+]

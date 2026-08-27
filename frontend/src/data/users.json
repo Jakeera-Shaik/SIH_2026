@@ -1,0 +1,85 @@
+[
+  {
+    "id": "f-shaik",
+    "name": "Shaik Shakeera",
+    "email": "shaikshakeera7864@gmail.com",
+    "password": "123456",
+    "role": "farmer",
+    "mobile": "+91 98480 12345",
+    "state": "Maharashtra",
+    "district": "Amravati",
+    "createdDate": "2026-08-27"
+  },
+  {
+    "id": "m-nashik",
+    "name": "Nashik APMC (Dindori Road)",
+    "companyName": "Nashik APMC (Dindori Road)",
+    "email": "nashik@gmail.com",
+    "password": "govt123",
+    "role": "mandi",
+    "mobile": "+91 94222 10001",
+    "state": "Maharashtra",
+    "district": "Nashik",
+    "createdDate": "2026-08-27"
+  },
+  {
+    "id": "m-amravati",
+    "name": "Amravati APMC Main Yard",
+    "companyName": "Amravati APMC Main Yard",
+    "email": "amravati@gmail.com",
+    "password": "govt123",
+    "role": "mandi",
+    "mobile": "+91 94222 10005",
+    "state": "Maharashtra",
+    "district": "Amravati",
+    "createdDate": "2026-08-27"
+  },
+  {
+    "id": "m-pune",
+    "name": "Pune APMC (Gultekdi)",
+    "companyName": "Pune APMC (Gultekdi)",
+    "email": "pune@gmail.com",
+    "password": "govt123",
+    "role": "mandi",
+    "mobile": "+91 94222 10002",
+    "state": "Maharashtra",
+    "district": "Pune",
+    "createdDate": "2026-08-27"
+  },
+  {
+    "id": "m-lasalgaon",
+    "name": "Lasalgaon APMC",
+    "companyName": "Lasalgaon APMC",
+    "email": "lasalgaon@gmail.com",
+    "password": "govt123",
+    "role": "mandi",
+    "mobile": "+91 94222 10003",
+    "state": "Maharashtra",
+    "district": "Nashik",
+    "createdDate": "2026-08-27"
+  },
+  {
+    "id": "m-vashi",
+    "name": "Mumbai Vashi APMC",
+    "companyName": "Mumbai Vashi APMC",
+    "email": "vashi@gmail.com",
+    "password": "govt123",
+    "role": "mandi",
+    "mobile": "+91 94222 10004",
+    "state": "Maharashtra",
+    "district": "Thane",
+    "createdDate": "2026-08-27"
+  },
+  {
+    "id": "m-pimplegaon",
+    "name": "Pimplegaon Baswant APMC",
+    "companyName": "Pimplegaon Baswant APMC",
+    "email": "pimplegaon@gmail.com",
+    "password": "govt123",
+    "role": "mandi",
+    "mobile": "+91 94222 10006",
+    "state": "Maharashtra",
+    "district": "Nashik",
+    "createdDate": "2026-08-27"
+  }
+]

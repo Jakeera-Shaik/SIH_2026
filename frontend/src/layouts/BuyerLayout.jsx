@@ -6,7 +6,7 @@ import Footer from '../components/common/Footer';
 
 export const BuyerLayout = () => {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
       <Navbar />
       <div className="flex-1 flex max-w-7xl w-full mx-auto">
         <Sidebar role="buyer" />

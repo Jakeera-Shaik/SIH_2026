@@ -15,10 +15,10 @@ import java.util.Map;
 @Slf4j
 public class AiServiceClient {
 
-    private final RestClient aiServiceClient;
+    private final RestClient restClient;
 
-    public AiServiceClient(RestClient aiServiceClient) {
-        this.aiServiceClient = aiServiceClient;
+    public AiServiceClient(@org.springframework.beans.factory.annotation.Qualifier("aiRestClient") RestClient restClient) {
+        this.restClient = restClient;
     }
 
     public PricePredictionResponse predictPrice(String crop, String variety, String market, Double currentPrice, int days) {
@@ -31,7 +31,7 @@ public class AiServiceClient {
                     "days", days > 0 ? days : 7
             );
 
-            return aiServiceClient.post()
+            return restClient.post()
                     .uri("/predict")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(requestPayload)

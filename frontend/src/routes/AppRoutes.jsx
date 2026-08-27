@@ -5,6 +5,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import PublicLayout from '../layouts/PublicLayout';
 import FarmerLayout from '../layouts/FarmerLayout';
 import BuyerLayout from '../layouts/BuyerLayout';
+import MandiLayout from '../layouts/MandiLayout';
 import ProtectedRoute from './ProtectedRoute';
 
 // Public Pages
@@ -31,6 +32,9 @@ import CreateRequirement from '../pages/buyer/CreateRequirement';
 import BuyerMatches from '../pages/buyer/BuyerMatches';
 import BuyerOffers from '../pages/buyer/BuyerOffers';
 import BuyerProfile from '../pages/buyer/BuyerProfile';
+
+// Mandi Pages
+import MandiDashboard from '../pages/mandi/MandiDashboard';
 
 export const AppRoutes = () => {
   return (
@@ -76,6 +80,20 @@ export const AppRoutes = () => {
         <Route path="/buyer/matches" element={<BuyerMatches />} />
         <Route path="/buyer/offers" element={<BuyerOffers />} />
         <Route path="/buyer/profile" element={<BuyerProfile />} />
+      </Route>
+
+      {/* Mandi Official Routes */}
+      <Route
+        element={
+          <ProtectedRoute requiredRole="mandi">
+            <MandiLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/mandi/dashboard" element={<MandiDashboard />} />
+        <Route path="/mandi/rates" element={<MandiPrices />} />
+        <Route path="/mandi/markets/:marketId" element={<MarketDetails />} />
+        <Route path="/mandi/profile" element={<FarmerProfile />} />
       </Route>
 
       {/* Fallback */}
