@@ -11,7 +11,7 @@ import { Store, ShoppingBag, PlusCircle, Target, ArrowRight, Handshake } from 'l
 import { formatCurrency } from '../../utils/formatters';
 
 export const BuyerDashboard = () => {
-  const { user } = useAuth();
+  const { user } = useAuth() || {};
   const [loading, setLoading] = useState(true);
   const [requirements, setRequirements] = useState([]);
   const [matches, setMatches] = useState([]);

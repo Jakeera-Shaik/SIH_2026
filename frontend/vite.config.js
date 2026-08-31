@@ -90,5 +90,10 @@ function jsonWriterPlugin() {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), jsonWriterPlugin()]
+  plugins: [react(), tailwindcss(), jsonWriterPlugin()],
+  server: {
+    watch: {
+      ignored: ['**/src/data/**']
+    }
+  }
 });

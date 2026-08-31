@@ -216,16 +216,24 @@ export const MandiPrices = () => {
                             </span>
                           </td>
                           <td className="py-4 px-4 text-right">
-                            <button
-                              onClick={() => {
-                                setSelectedMarketName(market.name);
-                                setActiveTab('price-trends');
-                              }}
-                              className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-800 font-bold text-xs"
-                            >
-                              <span>Compare Graph</span>
-                              <ArrowRight className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              <Link
+                                to={`/farmer/markets/${market.id || 'm-1'}`}
+                                className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs transition-all"
+                              >
+                                <span>View Market Details</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </Link>
+                              <button
+                                onClick={() => {
+                                  setSelectedMarketName(market.name);
+                                  setActiveTab('price-trends');
+                                }}
+                                className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 font-bold text-xs bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-xl transition-all"
+                              >
+                                <span>Compare</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

@@ -34,8 +34,16 @@ export const Sidebar = ({ role = 'farmer' }) => {
     { to: '/mandi/profile', label: 'Yard Profile', icon: User },
   ];
 
-  const links = role === 'mandi' ? mandiLinks : (role === 'buyer' ? buyerLinks : farmerLinks);
-  const portalName = role === 'mandi' ? 'APMC Mandi Portal' : (role === 'buyer' ? 'Buyer Portal' : 'Farmer Portal');
+  const adminLinks = [
+    { to: '/admin/dashboard', label: 'Admin Command Center', icon: LayoutDashboard },
+    { to: '/admin/dashboard?tab=users', label: 'Manage Users', icon: Users },
+    { to: '/admin/dashboard?tab=mandis', label: 'Manage Mandis', icon: Building2 },
+    { to: '/admin/dashboard?tab=crops', label: 'Manage Crops', icon: Store },
+    { to: '/admin/dashboard?tab=trades', label: 'Trades & Logistics', icon: Handshake },
+  ];
+
+  const links = role === 'admin' ? adminLinks : (role === 'mandi' ? mandiLinks : (role === 'buyer' ? buyerLinks : farmerLinks));
+  const portalName = role === 'admin' ? 'Master Admin Portal' : (role === 'mandi' ? 'APMC Mandi Portal' : (role === 'buyer' ? 'Buyer Portal' : 'Farmer Portal'));
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col min-h-[calc(100vh-4rem)] p-4 shadow-xs">

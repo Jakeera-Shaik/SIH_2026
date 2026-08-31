@@ -81,6 +81,49 @@ public class SecurityConfig {
                         
                         .anyRequest().authenticated()
                 )
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((req, res, authEx) -> {
+                            System.err.println("\n===== AUTH DEBUG =====");
+                            System.err.println("Endpoint: " + req.getRequestURI());
+                            System.err.println("Method: " + req.getMethod());
+                            System.err.println("User: Anonymous");
+                            System.err.println("Role: None");
+                            System.err.println("Token received: " + (req.getHeader("Authorization") != null));
+                            System.err.println("Token valid: false");
+                            System.err.println("Authentication result: 401 UNAUTHORIZED");
+                            System.err.println("HTTP Status: 401");
+                            System.err.println("Error: " + authEx.getMessage());
+                            System.err.println("Exception: " + authEx.getClass().getName());
+                            System.err.println("======================\n");
+                            res.setStatus(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED);
+                            res.setContentType("application/json");
+                            res.getWriter().write("{\"success\":false,\"message\":\"Unauthorized: " + authEx.getMessage() + "\"}");
+                        })
+                        .accessDeniedHandler((req, res, accessEx) -> {
+                            String user = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication() != null
+                                    ? org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName()
+                                    : "Anonymous";
+                            Object roles = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication() != null
+                                    ? org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getAuthorities()
+                                    : "None";
+
+                            System.err.println("\n===== AUTH DEBUG =====");
+                            System.err.println("Endpoint: " + req.getRequestURI());
+                            System.err.println("Method: " + req.getMethod());
+                            System.err.println("User: " + user);
+                            System.err.println("Role: " + roles);
+                            System.err.println("Token received: " + (req.getHeader("Authorization") != null));
+                            System.err.println("Token valid: true");
+                            System.err.println("Authentication result: 403 FORBIDDEN");
+                            System.err.println("HTTP Status: 403");
+                            System.err.println("Error: " + accessEx.getMessage());
+                            System.err.println("Exception: " + accessEx.getClass().getName());
+                            System.err.println("======================\n");
+                            res.setStatus(jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN);
+                            res.setContentType("application/json");
+                            res.getWriter().write("{\"success\":false,\"message\":\"Access Denied: " + accessEx.getMessage() + "\"}");
+                        })
+                )
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

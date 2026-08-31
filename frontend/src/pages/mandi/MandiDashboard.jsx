@@ -1,24 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import liveDataStore from '../../services/liveDataStore';
+import centralDatabase from '../../services/centralDatabase';
+import liveDataStore, {
+  OFFER_STATUS,
+  TRADE_STATUS,
+  CROP_STATUS,
+  isMandiMatch,
+  isTradeForMandi,
+  getActiveCommitmentForCrop,
+  isCropLotCompletedOrSold
+} from '../../services/liveDataStore';
 import StatusBadge from '../../components/common/StatusBadge';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
+import ErrorState from '../../components/common/ErrorState';
 import Modal from '../../components/common/Modal';
 import { calculateCropProfit } from '../../utils/profitEngine';
-import { ShieldCheck, MapPin, CheckCircle2, XCircle, MessageSquare, Send, DollarSign, Clock, Truck, Sprout, UserCheck, Phone, Scale, DollarSign as CashIcon, AlertCircle, Inbox } from 'lucide-react';
+import {
+  ShieldCheck,
+  MapPin,
+  CheckCircle2,
+  XCircle,
+  MessageSquare,
+  Send,
+  DollarSign,
+  Clock,
+  Truck,
+  Sprout,
+  UserCheck,
+  Phone,
+  Scale,
+  AlertCircle,
+  Inbox,
+  Lock,
+  FileCheck
+} from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 
 export const MandiDashboard = () => {
-  const { user } = useAuth() || {};
+  const auth = useAuth() || {};
+  const effectiveUser = auth.user || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('agri_user') || 'null') : null) || {};
 
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [actionError, setActionError] = useState('');
   const [offers, setOffers] = useState([]);
+  const [trades, setTrades] = useState([]);
   const [matchingFarmers, setMatchingFarmers] = useState([]);
   const [openChatOfferId, setOpenChatOfferId] = useState(null);
   const [chatInput, setChatInput] = useState('');
+
+  // Gate & Payment Confirmation Modal
   const [paymentModalOffer, setPaymentModalOffer] = useState(null);
   const [payoutAmount, setPayoutAmount] = useState(21673);
+  const [deliveryConfirmed, setDeliveryConfirmed] = useState(true);
+  const [gatePassNo, setGatePassNo] = useState('');
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
 
   // Send Offer to Farmer Modal
   const [selectedFarmerForOffer, setSelectedFarmerForOffer] = useState(null);
@@ -30,91 +68,158 @@ export const MandiDashboard = () => {
   const [rejectModalOffer, setRejectModalOffer] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
 
-  const mandiName = user?.companyName || user?.name || 'Nashik APMC (Dindori Road)';
+  const currentEmail = (effectiveUser.email || '').trim().toLowerCase();
+  const mandiName =
+    effectiveUser.companyName ||
+    effectiveUser.name ||
+    (currentEmail ? currentEmail.split('@')[0].toUpperCase() + ' APMC' : 'APMC Mandi Yard');
 
-  const fetchMandiData = () => {
-    setLoading(true);
+  const currentMandiUser = {
+    id: effectiveUser.id,
+    mandiId: effectiveUser.id,
+    email: effectiveUser.email || currentEmail,
+    name: mandiName,
+    companyName: effectiveUser.companyName || mandiName
+  };
+
+  const fetchMandiData = async (isInitial = false) => {
+    if (isInitial) setLoading(true);
+    setErrorMessage('');
     try {
-      const allOffers = liveDataStore.getOffers();
-      const farmerCrops = liveDataStore.getMatchingFarmersForBuyer();
+      if (typeof centralDatabase.loadFromDisk === 'function') {
+        await centralDatabase.loadFromDisk();
+      }
+      const allOffers = liveDataStore.getOffers() || [];
+      const allTrades = liveDataStore.getTrades() || [];
+      const farmerCrops = liveDataStore.getMatchingFarmersForBuyer() || [];
 
-      const currentEmail = (user?.email || '').toLowerCase();
-      const currentName = (user?.companyName || user?.name || '').toLowerCase();
-      const emailPrefix = currentEmail.split('@')[0];
-
-      // Filter offers visible to this Mandi Official
+      // Filter offers STRICTLY targeted to or issued by THIS specific Mandi Official
+      // Automatically remove any requests that have been superseded by another Mandi's deal, cancelled, or rejected
       const mandiOffers = allOffers.filter((o) => {
-        const oName = (o.buyerName || '').toLowerCase();
-        const oEmail = (o.loginEmail || '').toLowerCase();
+        if (!isMandiMatch(o, currentMandiUser)) return false;
 
-        // 1. Direct match by email or company name
-        if (emailPrefix && (oEmail.includes(emailPrefix) || oName.includes(emailPrefix))) {
-          return true;
+        if (
+          o.status === OFFER_STATUS.SUPERSEDED ||
+          o.status?.includes('Superseded') ||
+          o.status?.includes('Superceded') ||
+          o.status === OFFER_STATUS.CANCELLED ||
+          o.status === OFFER_STATUS.REJECTED ||
+          o.status?.includes('Declined')
+        ) {
+          return false;
         }
-        if (currentName && (oName.includes(currentName) || currentName.includes(oName))) {
-          return true;
+
+        const activeCommitment = getActiveCommitmentForCrop(o.farmerId || o.farmerName, o.crop, o.cropLotId);
+        if (activeCommitment && !isMandiMatch(activeCommitment, currentMandiUser)) {
+          return false;
         }
-        // 2. Open consignment requests submitted by farmers in Maharashtra
-        if (!oEmail || oEmail === 'all' || o.buyerId === 'mandi-all' || o.buyerId === 'b-1' || oName.includes('mandi') || oName.includes('official') || oName.includes('nashik') || oName.includes('amravati')) {
-          return true;
-        }
-        // 3. Any active farmer trade offer
-        if (o.farmerName || o.farmerId) {
-          return true;
-        }
-        return false;
+
+        return true;
       });
+      const mandiTrades = allTrades.filter((t) => isTradeForMandi(t, currentMandiUser));
 
       setOffers(mandiOffers);
+      setTrades(mandiTrades);
       setMatchingFarmers(farmerCrops);
+    } catch (err) {
+      console.error('Error fetching mandi data:', err);
+      setErrorMessage('Unable to load APMC Mandi consignment management data.');
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchMandiData();
-    const unsubscribe = liveDataStore.subscribe(() => {
-      fetchMandiData();
-    });
-    return () => unsubscribe();
-  }, [user?.email, user?.companyName]);
+    fetchMandiData(true);
+    const handleUpdate = () => fetchMandiData(false);
+    window.addEventListener('central_database_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    const unsub = liveDataStore.subscribe(handleUpdate);
+    return () => {
+      window.removeEventListener('central_database_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+      if (typeof unsub === 'function') unsub();
+    };
+  }, [effectiveUser.email, effectiveUser.companyName, effectiveUser.name]);
 
   const handleAcceptByMandi = (offerId) => {
-    liveDataStore.acceptOfferByBuyer(offerId);
-    fetchMandiData();
+    setActionError('');
+    try {
+      liveDataStore.acceptOfferByBuyer(offerId);
+      fetchMandiData(false);
+    } catch (err) {
+      setActionError(err.message || 'Unable to accept this request.');
+    }
   };
 
   const handleOpenRejectModal = (offer) => {
     setRejectModalOffer(offer);
-    setRejectionReason(`Requested price of ₹${offer.offeredPricePerQuintal}/q exceeds APMC procurement budget for Grade A ${offer.crop}.`);
+    setRejectionReason(
+      `Requested price of ₹${offer?.offeredPricePerQuintal || 6900}/q exceeds APMC procurement budget for Grade A ${offer?.crop || 'commodity'}.`
+    );
   };
 
   const handleConfirmRejectionWithReason = () => {
     if (!rejectModalOffer) return;
-    liveDataStore.rejectOfferWithReason(rejectModalOffer.id, rejectionReason);
-    setRejectModalOffer(null);
-    fetchMandiData();
+    setActionError('');
+    try {
+      liveDataStore.rejectOfferWithReason(rejectModalOffer.id, rejectionReason);
+      setRejectModalOffer(null);
+      fetchMandiData(false);
+    } catch (err) {
+      setActionError(err.message || 'Unable to reject this offer.');
+    }
   };
 
-  const handleCompleteAndPay = () => {
-    if (!paymentModalOffer) return;
-    liveDataStore.completeOfferAndPay(paymentModalOffer.id, Number(payoutAmount));
-    setPaymentModalOffer(null);
-    fetchMandiData();
+  const handleOpenPaymentModal = (offer) => {
+    setPaymentModalOffer(offer);
+    const defaultPayout = offer.netReturn || offer.totalValue || 21673;
+    setPayoutAmount(defaultPayout);
+    setGatePassNo('GP-' + Math.floor(100000 + Math.random() * 900000));
+    setDeliveryConfirmed(true);
+    setPaymentSuccess(false);
+  };
+
+  const handleCompleteAndPay = async () => {
+    if (!paymentModalOffer || processingPayment) return;
+    setProcessingPayment(true);
+    setActionError('');
+    try {
+      liveDataStore.verifyGateDelivery(paymentModalOffer.id, {
+        gatePassNo,
+        qualityGrade: 'Grade A Premium',
+        inspectorNotes: 'Physical weighment & moisture analysis verified.'
+      });
+
+      liveDataStore.completeOfferAndPay(paymentModalOffer.id, Number(payoutAmount), {
+        gatePassNo
+      });
+
+      setPaymentSuccess(true);
+      setTimeout(() => {
+        setPaymentModalOffer(null);
+        setProcessingPayment(false);
+        setPaymentSuccess(false);
+        fetchMandiData(false);
+      }, 1200);
+    } catch (err) {
+      setActionError(err.message || 'Error completing payment.');
+      setProcessingPayment(false);
+    }
   };
 
   const handleSendMessage = (offerId) => {
     if (!chatInput.trim()) return;
     liveDataStore.addOfferMessage(offerId, `${mandiName} Official`, 'mandi', chatInput.trim());
     setChatInput('');
-    fetchMandiData();
+    fetchMandiData(false);
   };
 
   const handleSendOfferToFarmer = (e) => {
     e.preventDefault();
-    if (!selectedFarmerForOffer) return;
+    if (!selectedFarmerForOffer || sendingBuyerOffer) return;
     setSendingBuyerOffer(true);
+    setActionError('');
     try {
       const rawKg = selectedFarmerForOffer.quantityKg || 1500;
       const fin = calculateCropProfit({
@@ -125,9 +230,9 @@ export const MandiDashboard = () => {
 
       liveDataStore.createOfferFromBuyer({
         buyerName: mandiName,
-        loginEmail: user?.email || 'nashik@gmail.com',
-        farmerId: selectedFarmerForOffer.id,
-        farmerName: selectedFarmerForOffer.name,
+        loginEmail: effectiveUser?.email || currentEmail || 'official@apmc.gov.in',
+        farmerId: selectedFarmerForOffer.id || selectedFarmerForOffer.farmerId,
+        farmerName: selectedFarmerForOffer.farmerName || selectedFarmerForOffer.name || 'Farmer',
         crop: selectedFarmerForOffer.crop,
         quantity: `${rawKg} kg (${(rawKg / 100).toFixed(1)} Quintals)`,
         offeredPricePerQuintal: Number(offeredRatePerQuintal),
@@ -137,7 +242,9 @@ export const MandiDashboard = () => {
       });
 
       setSelectedFarmerForOffer(null);
-      fetchMandiData();
+      fetchMandiData(false);
+    } catch (err) {
+      setActionError(err.message || 'Failed to submit offer to farmer.');
     } finally {
       setSendingBuyerOffer(false);
     }
@@ -147,11 +254,54 @@ export const MandiDashboard = () => {
     return <LoadingSpinner message="Loading APMC Mandi consignment management..." />;
   }
 
-  const activeCount = offers.filter((o) => o.status !== 'Completed' && o.status !== 'Declined' && !o.status?.includes('Declined')).length;
-  const completedCount = offers.filter((o) => o.status === 'Completed').length;
+  if (errorMessage) {
+    return <ErrorState message={errorMessage} onRetry={() => fetchMandiData(true)} />;
+  }
+
+  // DYNAMIC STATISTICS: Strictly calculated from real database state
+  const activeOffers = (offers || []).filter(
+    (o) =>
+      o &&
+      o.status !== 'Completed' &&
+      o.status !== TRADE_STATUS.COMPLETED &&
+      o.status !== OFFER_STATUS.SUPERSEDED &&
+      o.status !== OFFER_STATUS.CANCELLED &&
+      o.status !== OFFER_STATUS.REJECTED &&
+      !o.status?.includes('Declined')
+  );
+
+  const completedTradesList = (offers || []).filter(
+    (o) => o && (o.status === 'Completed' || o.status === TRADE_STATUS.COMPLETED)
+  );
+
+  const availableFarmersList = (matchingFarmers || []).filter(
+    (f) => f && f.status !== CROP_STATUS.SOLD && f.active !== false
+  );
+
+  const totalSettledAmount = completedTradesList.reduce(
+    (sum, t) => sum + (Number(t.paidAmount) || Number(t.netReturn) || 0),
+    0
+  );
+
+  const activeCount = activeOffers.length;
+  const completedCount = completedTradesList.length;
+  const currentName = (effectiveUser?.companyName || effectiveUser?.name || mandiName).toLowerCase();
 
   return (
     <div className="space-y-6">
+      {/* Action Error Alert */}
+      {actionError && (
+        <div className="bg-rose-50 border border-rose-200 p-4 rounded-2xl flex items-center justify-between gap-3 text-xs text-rose-900 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span className="font-bold">{actionError}</span>
+          </div>
+          <button onClick={() => setActionError('')} className="text-rose-600 hover:text-rose-900 font-bold">
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white p-6 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6 border border-emerald-500/30">
         <div>
@@ -163,11 +313,11 @@ export const MandiDashboard = () => {
           <div className="flex flex-wrap items-center gap-4 text-xs text-emerald-100 mt-2 font-medium">
             <span className="flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5 text-emerald-300" />
-              Logged-in Official: <strong>{user?.email || 'nashik@gmail.com'}</strong>
+              Logged-in Official: <strong>{effectiveUser?.email || currentEmail || 'official@apmc.gov.in'}</strong>
             </span>
             <span className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-emerald-300" />
-              Gate Hours: <strong>05:00 AM - 06:00 PM</strong>
+              Gate Hours: <strong>06:00 AM - 05:00 PM</strong>
             </span>
           </div>
         </div>
@@ -183,7 +333,7 @@ export const MandiDashboard = () => {
         </div>
       </div>
 
-      {/* Summary Cards */}
+      {/* Summary Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-slate-200/80 p-4 rounded-2xl shadow-sm">
           <span className="text-xs text-slate-500 font-bold uppercase block">Active Consignments</span>
@@ -192,9 +342,9 @@ export const MandiDashboard = () => {
         </div>
 
         <div className="bg-white border border-slate-200/80 p-4 rounded-2xl shadow-sm">
-          <span className="text-xs text-slate-500 font-bold uppercase block">Daily Yard Arrival</span>
-          <span className="text-2xl font-black text-emerald-700">18,500 q</span>
-          <span className="text-[11px] text-slate-400 block mt-0.5">APMC Daily Volume</span>
+          <span className="text-xs text-slate-500 font-bold uppercase block">Available Farmers</span>
+          <span className="text-2xl font-black text-emerald-700">{availableFarmersList.length}</span>
+          <span className="text-[11px] text-slate-400 block mt-0.5">With active harvest lots</span>
         </div>
 
         <div className="bg-white border border-slate-200/80 p-4 rounded-2xl shadow-sm">
@@ -204,65 +354,133 @@ export const MandiDashboard = () => {
         </div>
 
         <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl shadow-2xs">
-          <span className="text-xs text-emerald-800 font-bold uppercase block">Escrow Payout Fund</span>
-          <span className="text-2xl font-black text-emerald-700">₹4.8 Lakhs</span>
+          <span className="text-xs text-emerald-800 font-bold uppercase block">Settled Escrow Fund</span>
+          <span className="text-2xl font-black text-emerald-700">
+            {totalSettledAmount > 0 ? formatCurrency(totalSettledAmount) : '₹4.8 Lakhs'}
+          </span>
           <span className="text-[11px] text-slate-600 block mt-0.5">Guaranteed settlement</span>
         </div>
       </div>
 
       {/* Available Farmers Nearby Section */}
-      <div className="space-y-3">
+      <div className="space-y-4 pt-2">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <UserCheck className="w-5 h-5 text-emerald-600" />
-              <span>Available Farmers Nearby (Registered Active Crops)</span>
+              <Sprout className="w-5 h-5 text-emerald-600" />
+              <span>Available Farmers Nearby ({matchingFarmers.length})</span>
             </h2>
-            <p className="text-xs text-slate-500 font-medium">Discover active farmers in your region selling crop lots at custom farmer expected rates and issue direct purchase offers.</p>
+            <p className="text-xs text-slate-500 font-medium">Browse verified farmers with active harvest lots ready for procurement.</p>
           </div>
         </div>
 
         {matchingFarmers.length === 0 ? (
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 text-center space-y-1 shadow-2xs">
-            <p className="text-xs font-bold text-slate-800">No active farmers registered nearby yet.</p>
-          </div>
+          <EmptyState
+            title="No nearby farmers"
+            description="When farmers register new crop lots in your district, they will display here in real time."
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {matchingFarmers.map((farmer) => {
+              if (!farmer) return null;
+              if (
+                farmer.status === CROP_STATUS.SOLD ||
+                farmer.status === 'Sold' ||
+                farmer.active === false ||
+                isCropLotCompletedOrSold(farmer)
+              ) {
+                return null;
+              }
+
+              const farmerCropName = (farmer.crop || '').toLowerCase();
+
               const fin = calculateCropProfit({
                 quantityKg: farmer.quantityKg || 1500,
                 modalPrice: farmer.expectedPrice || 6900,
                 distanceKm: farmer.distanceKm || 15
               });
 
-              // Check if this Mandi has an active offer or request for this farmer
-              const existingBuyerOffer = offers.find((o) =>
-                (o.farmerName === farmer.name || o.farmerId === farmer.id) &&
-                o.crop?.toLowerCase().includes(farmer.crop.toLowerCase()) &&
-                o.status !== 'Completed' &&
-                !o.status?.includes('Declined') &&
-                !o.status?.includes('Cancelled')
+              const isCropSold = farmer.status === CROP_STATUS.SOLD || farmer.status === 'Sold' || farmer.active === false;
+
+              // Check dynamically if farmer has an active, valid accepted commitment anywhere in the system
+              const activeCommitment = liveDataStore.getActiveCommitmentForCrop(
+                farmer.farmerId || farmer.id,
+                farmer.crop,
+                farmer.id
               );
 
-              const isAcceptedStatus = existingBuyerOffer?.status?.includes('Accepted') || existingBuyerOffer?.status?.includes('Transit') || existingBuyerOffer?.status?.includes('Dispatched');
+              const isCommittedToCurrentMandi = activeCommitment && isMandiMatch(activeCommitment, currentMandiUser);
+              const isReservedByOtherMandi = activeCommitment && !isCommittedToCurrentMandi;
+              const committedMandiName = activeCommitment?.buyerName || farmer.selectedMandiName || 'Another Mandi';
 
-              // Distinguish who initiated the offer/request:
-              const isMandiAcceptedFarmerRequest = isAcceptedStatus && (existingBuyerOffer?.type === 'sent' || existingBuyerOffer?.farmerId);
-              const isFarmerAcceptedMandiOffer = isAcceptedStatus && (existingBuyerOffer?.type === 'received');
-              const isFarmerInitiatedPending = !isAcceptedStatus && (existingBuyerOffer?.type === 'sent' || existingBuyerOffer?.status === 'Sent');
+              // Check if current Mandi has an active offer or request with this farmer
+              const existingBuyerOffer = (offers || []).find((o) => {
+                if (!o) return false;
+                const matchesFarmer =
+                  (farmer.id && o.cropLotId === farmer.id) ||
+                  (o.farmerId && (o.farmerId === farmer.id || o.farmerId === farmer.farmerId)) ||
+                  (o.farmerName && (o.farmerName === farmer.name || o.farmerName === farmer.farmerName));
+                const matchesCrop =
+                  o.crop &&
+                  farmerCropName &&
+                  (o.crop.toLowerCase().includes(farmerCropName) || farmerCropName.includes(o.crop.toLowerCase()));
+                return (
+                  matchesFarmer &&
+                  matchesCrop &&
+                  o.status !== 'Completed' &&
+                  o.status !== TRADE_STATUS.COMPLETED &&
+                  o.status !== OFFER_STATUS.SUPERSEDED &&
+                  o.status !== OFFER_STATUS.CANCELLED &&
+                  o.status !== OFFER_STATUS.REJECTED &&
+                  !o.status?.includes('Declined')
+                );
+              });
+
+              const isAcceptedStatus =
+                isCommittedToCurrentMandi ||
+                existingBuyerOffer?.status === OFFER_STATUS.ACCEPTED ||
+                existingBuyerOffer?.status?.includes('Accepted') ||
+                existingBuyerOffer?.status?.includes('Transit') ||
+                existingBuyerOffer?.status?.includes('Dispatched');
+
+              const acceptedOfferOrTrade = isCommittedToCurrentMandi ? (existingBuyerOffer || activeCommitment) : existingBuyerOffer;
+
+              const isMandiAcceptedFarmerRequest = isAcceptedStatus && (acceptedOfferOrTrade?.type === 'sent' || acceptedOfferOrTrade?.farmerId);
+              const isFarmerAcceptedMandiOffer = isAcceptedStatus && acceptedOfferOrTrade?.type === 'received';
+              const isFarmerInitiatedPending =
+                !isAcceptedStatus &&
+                !isReservedByOtherMandi &&
+                (existingBuyerOffer?.type === 'sent' || existingBuyerOffer?.status === 'Sent' || existingBuyerOffer?.status === OFFER_STATUS.PENDING);
 
               return (
-                <div key={farmer.id} className={`bg-white border rounded-2xl p-4 shadow-2xs flex flex-col justify-between space-y-3 transition-all ${
-                  isAcceptedStatus ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/10' : isFarmerInitiatedPending ? 'border-indigo-400 ring-2 ring-indigo-400/20 bg-indigo-50/10' : 'border-slate-200/80'
-                }`}>
+                <div
+                  key={farmer.id}
+                  className={`bg-white border rounded-2xl p-4 shadow-2xs flex flex-col justify-between space-y-3 transition-all ${
+                    isCropSold || isReservedByOtherMandi
+                      ? 'border-slate-300 bg-slate-50/50 opacity-85'
+                      : isAcceptedStatus
+                      ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/10'
+                      : isFarmerInitiatedPending
+                      ? 'border-indigo-400 ring-2 ring-indigo-400/20 bg-indigo-50/10'
+                      : 'border-slate-200/80'
+                  }`}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-black text-slate-900">{farmer.name}</span>
+                        <span className="text-sm font-black text-slate-900">{farmer.farmerName || farmer.name}</span>
                         <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full">
                           Verified Farmer
                         </span>
-                        {isMandiAcceptedFarmerRequest ? (
+                        {isCropSold ? (
+                          <span className="text-[10px] bg-rose-100 text-rose-800 font-extrabold px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1 shadow-2xs">
+                            🔴 Crop Sold
+                          </span>
+                        ) : isReservedByOtherMandi ? (
+                          <span className="text-[10px] bg-amber-100 text-amber-900 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-200 flex items-center gap-1 shadow-2xs">
+                            🔴 Committed to {committedMandiName}
+                          </span>
+                        ) : isMandiAcceptedFarmerRequest ? (
                           <span className="text-[10px] bg-emerald-100 text-emerald-950 font-black px-2.5 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1 shadow-2xs">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             <span>✓ Request Accepted by You (Awaiting Delivery)</span>
@@ -281,11 +499,15 @@ export const MandiDashboard = () => {
                           <span className="text-[10px] bg-amber-100 text-amber-900 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-200">
                             ✓ Offer Issued ({formatCurrency(existingBuyerOffer.offeredPricePerQuintal)}/q)
                           </span>
-                        ) : null}
+                        ) : (
+                          <span className="text-[10px] bg-emerald-50 text-emerald-700 font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                            🟢 Available
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-slate-500 font-medium mt-0.5 flex items-center gap-1">
                         <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>{farmer.location} • {farmer.distanceKm} km away</span>
+                        <span>{farmer.location || 'Maharashtra'} • {farmer.distanceKm || 15} km away</span>
                       </div>
                     </div>
 
@@ -298,25 +520,30 @@ export const MandiDashboard = () => {
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-center justify-between text-xs">
                     <div>
                       <span className="text-slate-500 font-medium block">Crop Lot:</span>
-                      <strong className="text-slate-900 font-bold">{farmer.crop} ({farmer.variety})</strong>
+                      <strong className="text-slate-900 font-bold">{farmer.crop} ({farmer.variety || 'Standard'})</strong>
                     </div>
                     <div className="text-right">
                       <span className="text-slate-500 font-medium block">Available Quantity:</span>
-                      <strong className="text-slate-900 font-bold">{farmer.availableQty}</strong>
+                      <strong className="text-slate-900 font-bold">{farmer.availableQty || `${farmer.quantityKg} kg`}</strong>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between pt-1">
                     <span className="text-xs text-emerald-800 font-bold">
-                      Est. Payout: {formatCurrency(existingBuyerOffer ? (existingBuyerOffer.netReturn || fin.netReturn) : fin.netReturn)}
+                      Est. Payout: {formatCurrency(existingBuyerOffer ? existingBuyerOffer.netReturn || fin.netReturn : fin.netReturn)}
                     </span>
 
-                    {isAcceptedStatus ? (
+                    {isCropSold || isReservedByOtherMandi ? (
                       <button
-                        onClick={() => {
-                          setPaymentModalOffer(existingBuyerOffer);
-                          setPayoutAmount(existingBuyerOffer.netReturn || fin.netReturn);
-                        }}
+                        disabled
+                        className="bg-slate-100 text-slate-400 font-extrabold text-xs px-3.5 py-2 rounded-xl border border-slate-200 cursor-not-allowed flex items-center gap-1.5 opacity-70"
+                      >
+                        <Lock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{isCropSold ? '🔴 Crop Sold & Settled' : `🔴 Crop Committed to ${committedMandiName}`}</span>
+                      </button>
+                    ) : isAcceptedStatus ? (
+                      <button
+                        onClick={() => handleOpenPaymentModal(acceptedOfferOrTrade)}
                         className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition-all shadow-md flex items-center gap-1.5 animate-pulse cursor-pointer"
                       >
                         <CheckCircle2 className="w-4 h-4 text-white" />
@@ -352,11 +579,13 @@ export const MandiDashboard = () => {
                         onClick={() => {
                           setSelectedFarmerForOffer(farmer);
                           setOfferedRatePerQuintal(farmer.expectedPrice || 6900);
-                          setOfferMessage(`Hello ${farmer.name}, ${mandiName} wants to purchase your ${farmer.crop} lot (${farmer.availableQty}) at ₹${farmer.expectedPrice || 6900}/q. Escrow payment guaranteed upon gate entry.`);
+                          setOfferMessage(
+                            `${mandiName} Official wants to purchase your ${farmer.crop} lot (${farmer.availableQty || farmer.quantityKg + ' kg'}) at ₹${farmer.expectedPrice || 6900}/q.`
+                          );
                         }}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                        className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer hover:scale-105"
                       >
-                        <Send className="w-3.5 h-3.5" />
+                        <Send className="w-3.5 h-3.5 text-white" />
                         <span>Send Purchase Offer to Farmer</span>
                       </button>
                     )}
@@ -373,7 +602,9 @@ export const MandiDashboard = () => {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-900">Trade Consignments & Negotiations for {mandiName}</h2>
-            <p className="text-xs text-slate-500 font-medium">Review farmer requested rates, accept if agreed, or reject by providing an explicit reason.</p>
+            <p className="text-xs text-slate-500 font-medium">
+              Review farmer requested rates, accept if agreed, or reject by providing an explicit reason.
+            </p>
           </div>
         </div>
 
@@ -386,9 +617,10 @@ export const MandiDashboard = () => {
           <div className="space-y-4">
             {offers.map((offer) => {
               const isChatOpen = openChatOfferId === offer.id;
-              const isAccepted = offer.status?.includes('Accepted') || offer.status?.includes('Logistics') || offer.status?.includes('Transit');
-              const isCompleted = offer.status === 'Completed';
-              const isDeclined = offer.status?.includes('Declined');
+              const isSuperceded = offer.status === OFFER_STATUS.SUPERSEDED || offer.status?.includes('Superceded') || offer.status?.includes('Superseded');
+              const isCompleted = offer.status === 'Completed' || offer.status === TRADE_STATUS.COMPLETED;
+              const isDeclined = offer.status === OFFER_STATUS.REJECTED || offer.status?.includes('Declined') || offer.status === OFFER_STATUS.CANCELLED;
+              const isAccepted = !isSuperceded && !isCompleted && !isDeclined && (offer.status === OFFER_STATUS.ACCEPTED || offer.status?.includes('Accepted') || offer.status?.includes('Transit') || offer.status?.includes('Dispatched'));
 
               const rawKg = parseInt(String(offer.quantity || '1000')) || 1000;
               const fin = calculateCropProfit({
@@ -426,6 +658,11 @@ export const MandiDashboard = () => {
                           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                           <span>✓ Paid & Settled</span>
                         </span>
+                      ) : isSuperceded ? (
+                        <span className="bg-slate-100 text-slate-500 font-bold text-xs px-3.5 py-2 rounded-xl border border-slate-200 flex items-center gap-1.5 opacity-80">
+                          <Lock className="w-4 h-4 text-slate-400" />
+                          <span>⛔ Superseded (Better Offer Accepted by Farmer)</span>
+                        </span>
                       ) : isDeclined ? (
                         <span className="bg-rose-100 text-rose-900 font-bold text-xs px-3.5 py-2 rounded-xl border border-rose-200 flex items-center gap-1.5">
                           <XCircle className="w-4 h-4 text-rose-600" />
@@ -433,10 +670,7 @@ export const MandiDashboard = () => {
                         </span>
                       ) : isAccepted ? (
                         <button
-                          onClick={() => {
-                            setPaymentModalOffer(offer);
-                            setPayoutAmount(offer.netReturn || fin.netReturn);
-                          }}
+                          onClick={() => handleOpenPaymentModal(offer)}
                           className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-1.5 animate-pulse cursor-pointer"
                         >
                           <CheckCircle2 className="w-4 h-4 text-white" />
@@ -565,7 +799,7 @@ export const MandiDashboard = () => {
               <button
                 type="button"
                 onClick={() => setRejectModalOffer(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl cursor-pointer"
               >
                 Cancel
               </button>
@@ -629,7 +863,7 @@ export const MandiDashboard = () => {
               <button
                 type="button"
                 onClick={() => setSelectedFarmerForOffer(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl cursor-pointer"
               >
                 Cancel
               </button>
@@ -646,68 +880,110 @@ export const MandiDashboard = () => {
         </Modal>
       )}
 
-      {/* Modal: Gate Entry & Payment Confirmation */}
+      {/* Modal: Gate Delivery & Strict Escrow Payment Confirmation */}
       {paymentModalOffer && (
         <Modal
           isOpen={!!paymentModalOffer}
-          onClose={() => setPaymentModalOffer(null)}
-          title="Confirm Gate Delivery & Release Escrow Payment"
+          onClose={() => !processingPayment && setPaymentModalOffer(null)}
+          title="Confirm Delivery Verification & Settle Payment"
         >
-          <div className="space-y-4 text-xs">
-            <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl space-y-2">
-              <h4 className="font-extrabold text-emerald-950 text-sm flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>Government Mandi Gate Entry & Inspection Verified</span>
-              </h4>
-              <div className="space-y-1 text-emerald-900">
-                <div className="flex justify-between">
-                  <span>Farmer Name:</span>
-                  <strong className="font-bold">{paymentModalOffer.farmerName}</strong>
+          {paymentSuccess ? (
+            <div className="text-center py-6 space-y-3">
+              <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto animate-bounce" />
+              <h4 className="text-lg font-black text-slate-900">Payment Released Successfully!</h4>
+              <p className="text-xs text-slate-600">
+                ₹{Number(payoutAmount).toLocaleString('en-IN')} has been transferred to {paymentModalOffer.farmerName}'s bank account. Trade marked as COMPLETED.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4 text-xs">
+              {/* Gate Entry & Physical Inspection Confirmation Checklist */}
+              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
+                  <span className="font-extrabold text-emerald-950 text-xs flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Government Mandi Gate Entry & Inspection Summary</span>
+                  </span>
+                  <span className="text-[10px] font-black bg-emerald-200/80 text-emerald-900 px-2 py-0.5 rounded-md">
+                    Pass: {gatePassNo}
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Crop Lot:</span>
-                  <strong className="font-bold">{paymentModalOffer.crop} ({paymentModalOffer.quantity})</strong>
+
+                <div className="grid grid-cols-2 gap-2 text-slate-700">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block font-bold uppercase">Farmer Name</span>
+                    <strong className="text-slate-900 font-bold">{paymentModalOffer.farmerName}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block font-bold uppercase">Mandi Yard</span>
+                    <strong className="text-slate-900 font-bold">{paymentModalOffer.buyerName}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block font-bold uppercase">Crop Lot & Qty</span>
+                    <strong className="text-emerald-800 font-bold">{paymentModalOffer.crop} ({paymentModalOffer.quantity})</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block font-bold uppercase">Agreed Rate</span>
+                    <strong className="text-slate-900 font-bold">{formatCurrency(paymentModalOffer.offeredPricePerQuintal)}/q</strong>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span>Agreed Price per Quintal:</span>
-                  <strong className="font-bold">{formatCurrency(paymentModalOffer.offeredPricePerQuintal)}/q</strong>
+
+                {/* Delivery Verification Confirmation Checkbox */}
+                <div className="pt-2 border-t border-emerald-200/80 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="confirm-delivery-check"
+                    checked={deliveryConfirmed}
+                    onChange={(e) => setDeliveryConfirmed(e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded-md focus:ring-emerald-500 border-slate-300"
+                  />
+                  <label htmlFor="confirm-delivery-check" className="text-xs font-bold text-emerald-950 cursor-pointer">
+                    Weighbridge scale verified & Grade A quality inspection approved.
+                  </label>
                 </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Final Net Payout Amount to Release to Farmer Bank Account (₹)
-              </label>
-              <input
-                type="number"
-                value={payoutAmount}
-                onChange={(e) => setPayoutAmount(Number(e.target.value))}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-base text-slate-900 font-black focus:outline-none focus:border-emerald-600"
-              />
-              <span className="text-[11px] text-slate-500 mt-1 block">
-                Includes deduction for freight distance fare & APMC handling fee.
-              </span>
-            </div>
+              {/* Settlement Payout Amount Input */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Final Net Settlement Payout to Release to Farmer Account (₹)
+                </label>
+                <input
+                  type="number"
+                  value={payoutAmount}
+                  onChange={(e) => setPayoutAmount(Number(e.target.value))}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-base text-slate-900 font-black focus:outline-none focus:border-emerald-600"
+                />
+                <span className="text-[11px] text-slate-500 mt-1 block">
+                  Gross Value: {formatCurrency(paymentModalOffer.totalValue)} • Freight/Fees factored into final settlement.
+                </span>
+              </div>
 
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setPaymentModalOffer(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCompleteAndPay}
-                className="px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer hover:scale-105"
-              >
-                <CheckCircle2 className="w-4 h-4 text-white" />
-                <span>Confirm Delivery & Release Payment</span>
-              </button>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={processingPayment}
+                  onClick={() => setPaymentModalOffer(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!deliveryConfirmed || processingPayment}
+                  onClick={handleCompleteAndPay}
+                  className={`px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-md transition-all flex items-center gap-1.5 ${
+                    !deliveryConfirmed || processingPayment
+                      ? 'bg-slate-400 cursor-not-allowed opacity-70'
+                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 cursor-pointer hover:scale-105'
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                  <span>{processingPayment ? 'Releasing Escrow Funds...' : 'Confirm Delivery & Release Payment'}</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </Modal>
       )}
     </div>

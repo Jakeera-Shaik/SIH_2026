@@ -4,7 +4,7 @@ import VerifiedBadge from '../../components/common/VerifiedBadge';
 import { CheckCircle2, Building2 } from 'lucide-react';
 
 export const BuyerProfile = () => {
-  const { user } = useAuth();
+  const { user } = useAuth() || {};
   const [saved, setSaved] = useState(false);
 
   const [formData, setFormData] = useState({

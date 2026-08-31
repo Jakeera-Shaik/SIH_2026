@@ -33,22 +33,36 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
         final String authHeader = request.getHeader("Authorization");
-        final String jwt;
-        final String userEmail;
+        final String requestUri = request.getRequestURI();
+        final String method = request.getMethod();
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        jwt = authHeader.substring(7);
+        final String jwt = authHeader.substring(7);
         try {
-            userEmail = jwtService.extractUsername(jwt);
+            final String userEmail = jwtService.extractUsername(jwt);
 
             if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
+                boolean isValid = jwtService.isTokenValid(jwt, userDetails);
 
-                if (jwtService.isTokenValid(jwt, userDetails)) {
+                System.out.println("\n===== AUTH DEBUG =====");
+                System.out.println("Endpoint: " + requestUri);
+                System.out.println("Method: " + method);
+                System.out.println("User: " + userEmail);
+                System.out.println("Role: " + userDetails.getAuthorities());
+                System.out.println("Token received: true");
+                System.out.println("Token valid: " + isValid);
+                System.out.println("Authentication result: " + (isValid ? "SUCCESS" : "INVALID_TOKEN"));
+                System.out.println("HTTP Status: Authenticated");
+                System.out.println("Error: None");
+                System.out.println("Exception: None");
+                System.out.println("======================\n");
+
+                if (isValid) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             userDetails,
                             null,
@@ -59,7 +73,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
             }
         } catch (Exception ex) {
-            // Token parsing or validation failed - clear context and proceed
+            System.err.println("\n===== AUTH DEBUG =====");
+            System.err.println("Endpoint: " + requestUri);
+            System.err.println("Method: " + method);
+            System.err.println("User: Unknown (token extraction failed)");
+            System.err.println("Role: None");
+            System.err.println("Token received: true");
+            System.err.println("Token valid: false");
+            System.err.println("Authentication result: FAILED");
+            System.err.println("HTTP Status: 401 UNAUTHORIZED");
+            System.err.println("Error: " + ex.getMessage());
+            System.err.println("Exception: " + ex.getClass().getName());
+            System.err.println("======================\n");
             SecurityContextHolder.clearContext();
         }
 

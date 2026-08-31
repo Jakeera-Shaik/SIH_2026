@@ -1,19 +1,23 @@
 import React from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 
-export const ErrorState = ({ message = 'Failed to load data from server.', onRetry }) => {
+export const ErrorState = ({ message = 'Unable to load this information.', onRetry }) => {
   return (
-    <div className="flex flex-col items-center justify-center p-8 bg-red-950/30 border border-red-800/50 rounded-2xl text-center">
-      <AlertTriangle className="w-10 h-10 text-red-400 mb-3" />
-      <h4 className="text-base font-semibold text-red-200 mb-1">Something went wrong</h4>
-      <p className="text-sm text-red-300/80 mb-4">{message}</p>
+    <div className="flex flex-col items-center justify-center p-8 bg-rose-50 border border-rose-200 rounded-3xl text-center space-y-3 shadow-2xs">
+      <div className="w-12 h-12 rounded-2xl bg-rose-100 border border-rose-200 flex items-center justify-center text-rose-600">
+        <AlertCircle className="w-6 h-6" />
+      </div>
+      <div>
+        <h4 className="text-base font-black text-slate-900 mb-1">Unable to Load Data</h4>
+        <p className="text-xs text-rose-800 font-medium max-w-md">{message}</p>
+      </div>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="inline-flex items-center gap-2 bg-red-900/60 hover:bg-red-900 text-red-100 text-xs font-semibold px-4 py-2 rounded-lg transition-colors border border-red-700/50"
+          className="inline-flex items-center gap-1.5 bg-white hover:bg-rose-100 text-rose-700 text-xs font-extrabold px-4 py-2 rounded-xl transition-all border border-rose-300 shadow-2xs cursor-pointer"
         >
           <RefreshCw className="w-3.5 h-3.5" />
-          Try Again
+          <span>Retry</span>
         </button>
       )}
     </div>

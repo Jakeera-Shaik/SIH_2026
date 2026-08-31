@@ -46,11 +46,11 @@ export const SendOfferModal = ({ isOpen, onClose, buyer, onOfferSent }) => {
     e.preventDefault();
     setSending(true);
     try {
-      const loginEmail = buyer.loginEmail || `${mandiName.split(' ')[0].toLowerCase()}@gmail.com`;
       await offerService.createOffer({
-        buyerId: buyer.id || buyer.mandiId || 'm-4',
+        cropLotId: safeCrop.id,
+        buyerId: buyer.id || buyer.mandiId,
         buyerName: mandiName,
-        loginEmail,
+        loginEmail: buyer.loginEmail || buyer.email,
         crop: cropName,
         quantity: `${quantityKg} kg (${(quantityKg / 100).toFixed(1)} Quintals)`,
         offeredPricePerQuintal: Number(pricePerQuintal),

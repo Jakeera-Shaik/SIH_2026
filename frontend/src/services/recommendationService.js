@@ -72,38 +72,55 @@ export const recommendationService = {
       const crop = normalizeCropName(params.crop || 'Onion');
 
       const marketsRes = await marketService.getCurrentPrices({ crop });
-      const rawMarkets = marketsRes.data || marketsRes || [];
+      const rawMarkets = marketsRes.data || (Array.isArray(marketsRes) ? marketsRes : []);
+      const maxPrice = Math.max(...rawMarkets.map((m) => m.modalPrice || 1), 1);
+      const calculatedMarkets = rawMarkets.map((market) => {
+        const mCoords = MANDI_COORDINATES[market.id] || { lat: 20.0059, lng: 73.7898 };
+        const distanceKm = calculateDistanceKm(origin.lat, origin.lng, mCoords.lat, mCoords.lng);
 
-      const ranked = rawMarkets
+        const fin = calculateCropProfit({
+          quantityKg,
+          modalPrice: market.modalPrice,
+          distanceKm,
+          commissionPercent: market.commissionPercent || 2
+        });
+
+        return {
+          ...market,
+          distanceKm,
+          grossRevenue: fin.grossRevenue,
+          transportCost: fin.transportCost,
+          handlingCost: fin.handlingCost,
+          commission: fin.commission,
+          netReturn: fin.netReturn
+        };
+      });
+
+      const maxNetReturn = Math.max(...calculatedMarkets.map((m) => m.netReturn || 1), 1);
+
+      const ranked = calculatedMarkets
         .map((market) => {
-          const mCoords = MANDI_COORDINATES[market.id] || { lat: 20.0059, lng: 73.7898 };
-          const distanceKm = calculateDistanceKm(origin.lat, origin.lng, mCoords.lat, mCoords.lng);
-
-          const fin = calculateCropProfit({
-            quantityKg,
-            modalPrice: market.modalPrice,
-            distanceKm,
-            commissionPercent: market.commissionPercent || 2
-          });
+          // Exact Formula: Score = Price * 40% + Net Return * 35% + Distance * 10% + Price Trend * 10% + Demand * 5%
+          const priceScore = (market.modalPrice / maxPrice) * 40;
+          const netScore = Math.max(0, market.netReturn / maxNetReturn) * 35;
+          const distScore = Math.max(0, 1 - market.distanceKm / 400) * 10;
+          const trendScore = market.trend === 'up' ? 10 : 7;
+          const demandScore = 5;
+          const recommendationScore = Math.min(99, Math.max(50, Math.round(priceScore + netScore + distScore + trendScore + demandScore)));
 
           return {
             ...market,
-            distanceKm,
-            grossRevenue: fin.grossRevenue,
-            transportCost: fin.transportCost,
-            handlingCost: fin.handlingCost,
-            commission: fin.commission,
-            netReturn: fin.netReturn
+            recommendationScore
           };
         })
-        .sort((a, b) => b.netReturn - a.netReturn)
+        .sort((a, b) => b.recommendationScore - a.recommendationScore || b.netReturn - a.netReturn)
         .map((market, idx) => ({
           ...market,
           rank: idx + 1,
           badge: idx === 0 ? '🥇 Best Value' : idx === 1 ? '🥈 2nd Choice' : '🥉 3rd Choice',
           explanation: idx === 0
-            ? `${market.name} provides maximum Net Return of ${formatCurrency(market.netReturn)} for ${origin.name} (${market.distanceKm} km freight).`
-            : `Competitive modal price (${formatCurrency(market.modalPrice)}/q), but ${market.distanceKm} km distance incurs ${formatCurrency(market.transportCost)} freight cost.`
+            ? `${market.name} provides maximum Net Return of ${formatCurrency(market.netReturn)} for ${origin.name} (${market.distanceKm} km freight, Score: ${market.recommendationScore}/100).`
+            : `Competitive modal price (${formatCurrency(market.modalPrice)}/q), but ${market.distanceKm} km distance incurs ${formatCurrency(market.transportCost)} freight cost (Score: ${market.recommendationScore}/100).`
         }));
 
       const topReco = ranked[0] ? {
@@ -112,16 +129,9 @@ export const recommendationService = {
         estimatedNetReturn: ranked[0].netReturn,
         currentModalPrice: ranked[0].modalPrice,
         estimatedTransportCost: ranked[0].transportCost,
-        recommendationScore: 95,
+        recommendationScore: ranked[0].recommendationScore || 95,
         reasoning: ranked[0].explanation
-      } : {
-        marketName: 'Lasalgaon APMC',
-        estimatedNetReturn: 32350,
-        currentModalPrice: 3380,
-        estimatedTransportCost: 700,
-        recommendationScore: 95,
-        reasoning: 'Highest net profit after transport.'
-      };
+      } : null;
 
       return {
         topRecommendation: topReco,

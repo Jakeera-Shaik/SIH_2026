@@ -36,6 +36,10 @@ import BuyerProfile from '../pages/buyer/BuyerProfile';
 // Mandi Pages
 import MandiDashboard from '../pages/mandi/MandiDashboard';
 
+// Admin Pages & Layout
+import AdminLayout from '../layouts/AdminLayout';
+import AdminDashboard from '../pages/admin/AdminDashboard';
+
 export const AppRoutes = () => {
   return (
     <Routes>
@@ -44,6 +48,17 @@ export const AppRoutes = () => {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+      </Route>
+
+      {/* Admin Routes */}
+      <Route
+        element={
+          <ProtectedRoute requiredRole="admin">
+            <AdminLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
       </Route>
 
       {/* Farmer Routes */}

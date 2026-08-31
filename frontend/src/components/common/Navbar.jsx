@@ -3,8 +3,18 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Sprout, LogOut, Sparkles, ShieldCheck } from 'lucide-react';
 
+import authService from '../../services/authService';
+
 export const Navbar = () => {
-  const { user, role, logout, isAuthenticated } = useAuth() || {};
+  const auth = useAuth() || {};
+  const storedUser = authService.getCurrentUser();
+  const storedToken = localStorage.getItem('agri_auth_token');
+  const storedRole = localStorage.getItem('agri_user_role');
+
+  const user = auth.user || storedUser;
+  const role = auth.role || storedRole || user?.role || 'farmer';
+  const isAuthenticated = auth.isAuthenticated || !!(storedToken && user);
+  const logout = auth.logout || (() => authService.logout());
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -29,17 +39,6 @@ export const Navbar = () => {
             </span>
           </div>
         </Link>
-
-        {/* Quick primary action */}
-        {role === 'farmer' && (
-          <Link
-            to="/farmer/recommendations"
-            className="hidden md:flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold px-4 py-2 rounded-xl shadow-sm hover:shadow transition-all text-sm"
-          >
-            <Sparkles className="w-4 h-4 text-emerald-200 animate-pulse" />
-            Find Best Market
-          </Link>
-        )}
 
         {/* User Auth controls */}
         <div className="flex items-center gap-4">

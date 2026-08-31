@@ -4,7 +4,7 @@ import farmerService from '../../services/farmerService';
 import { ShieldCheck, CheckCircle2 } from 'lucide-react';
 
 export const FarmerProfile = () => {
-  const { user } = useAuth();
+  const { user } = useAuth() || {};
   const [saved, setSaved] = useState(false);
 
   const [formData, setFormData] = useState({

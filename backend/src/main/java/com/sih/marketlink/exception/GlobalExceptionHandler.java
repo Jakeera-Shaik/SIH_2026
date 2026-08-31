@@ -62,6 +62,18 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({BadCredentialsException.class, UnauthorizedException.class})
     public ResponseEntity<ErrorResponse> handleAuthenticationException(Exception ex, HttpServletRequest request) {
+        System.err.println("\n===== AUTH DEBUG =====");
+        System.err.println("Endpoint: " + request.getRequestURI());
+        System.err.println("Method: " + request.getMethod());
+        System.err.println("User: " + (request.getUserPrincipal() != null ? request.getUserPrincipal().getName() : "Anonymous"));
+        System.err.println("Token received: " + (request.getHeader("Authorization") != null));
+        System.err.println("Token valid: false");
+        System.err.println("Authentication result: 401 UNAUTHORIZED");
+        System.err.println("HTTP Status: 401");
+        System.err.println("Error: " + ex.getMessage());
+        System.err.println("Exception: " + ex.getClass().getName());
+        System.err.println("======================\n");
+
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(ZonedDateTime.now())
                 .status(HttpStatus.UNAUTHORIZED.value())
@@ -74,6 +86,18 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        System.err.println("\n===== AUTH DEBUG =====");
+        System.err.println("Endpoint: " + request.getRequestURI());
+        System.err.println("Method: " + request.getMethod());
+        System.err.println("User: " + (request.getUserPrincipal() != null ? request.getUserPrincipal().getName() : "Anonymous"));
+        System.err.println("Token received: " + (request.getHeader("Authorization") != null));
+        System.err.println("Token valid: true");
+        System.err.println("Authentication result: 403 FORBIDDEN");
+        System.err.println("HTTP Status: 403");
+        System.err.println("Error: " + ex.getMessage());
+        System.err.println("Exception: " + ex.getClass().getName());
+        System.err.println("======================\n");
+
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(ZonedDateTime.now())
                 .status(HttpStatus.FORBIDDEN.value())
@@ -86,6 +110,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneralException(Exception ex, HttpServletRequest request) {
+        System.err.println("\n===== AUTH DEBUG =====");
+        System.err.println("Endpoint: " + request.getRequestURI());
+        System.err.println("Method: " + request.getMethod());
+        System.err.println("User: " + (request.getUserPrincipal() != null ? request.getUserPrincipal().getName() : "Anonymous"));
+        System.err.println("Token received: " + (request.getHeader("Authorization") != null));
+        System.err.println("HTTP Status: 500 INTERNAL_SERVER_ERROR");
+        System.err.println("Error: " + ex.getMessage());
+        System.err.println("Exception: " + ex.getClass().getName());
+        System.err.println("======================\n");
+
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(ZonedDateTime.now())
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())

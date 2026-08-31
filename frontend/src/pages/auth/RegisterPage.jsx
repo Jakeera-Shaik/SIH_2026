@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Sprout, UserCheck, Building2, ShieldCheck } from 'lucide-react';
 
 export const RegisterPage = () => {
-  const { register: registerAuth } = useAuth();
+  const { register: registerAuth } = useAuth() || {};
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
 

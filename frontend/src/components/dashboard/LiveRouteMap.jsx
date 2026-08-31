@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
-import { Navigation, MapPin, ExternalLink, Compass, Clock, Truck, Phone, ShieldCheck, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Navigation,
+  MapPin,
+  ExternalLink,
+  Compass,
+  Clock,
+  Truck,
+  Phone,
+  ShieldCheck,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle
+} from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 
 export const LiveRouteMap = ({
@@ -16,9 +29,32 @@ export const LiveRouteMap = ({
 }) => {
   const [showTurnByTurn, setShowTurnByTurn] = useState(false);
 
-  const googleMapsRouteUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originName)}&destination=${destCoords.lat},${destCoords.lng}&travelmode=driving`;
-  
-  // Google Maps Embed URL showing route directions
+  const hasValidCoords =
+    originCoords &&
+    typeof originCoords.lat === 'number' &&
+    typeof originCoords.lng === 'number' &&
+    destCoords &&
+    typeof destCoords.lat === 'number' &&
+    typeof destCoords.lng === 'number';
+
+  if (!hasValidCoords) {
+    return (
+      <div className="bg-white border border-slate-200/90 rounded-3xl p-8 shadow-sm text-center space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mx-auto">
+          <AlertCircle className="w-6 h-6" />
+        </div>
+        <h3 className="text-base font-black text-slate-900">Route Information Unavailable</h3>
+        <p className="text-xs text-slate-500 max-w-sm mx-auto font-medium">
+          GPS coordinates for {mandiName} could not be determined. Please verify your origin location or contact APMC helpline.
+        </p>
+      </div>
+    );
+  }
+
+  const googleMapsRouteUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
+    originName
+  )}&destination=${destCoords.lat},${destCoords.lng}&travelmode=driving`;
+
   const mapEmbedUrl = `https://maps.google.com/maps?saddr=${originCoords.lat},${originCoords.lng}&daddr=${destCoords.lat},${destCoords.lng}&output=embed`;
 
   const estMins = Math.round(distanceKm * 1.8);
@@ -36,7 +72,7 @@ export const LiveRouteMap = ({
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider mb-1.5 border border-emerald-400/30">
-            <Compass className="w-3.5 h-3.5 text-emerald-400 animate-spin-slow" />
+            <Compass className="w-3.5 h-3.5 text-emerald-400" />
             <span>Live GPS Route & Location Navigation</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-white">
@@ -55,7 +91,7 @@ export const LiveRouteMap = ({
           href={googleMapsRouteUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-extrabold px-5 py-3 rounded-2xl shadow-md transition-all hover:scale-105 shrink-0"
+          className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-extrabold px-5 py-3 rounded-2xl shadow-md transition-all hover:scale-105 shrink-0 cursor-pointer"
         >
           <Navigation className="w-4 h-4" />
           <span>Launch Full Google Maps Navigation</span>
@@ -84,7 +120,7 @@ export const LiveRouteMap = ({
           </div>
           <div className="text-xs text-slate-700 font-medium space-y-1">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-slate-500">Freight Freight:</span>
+              <span className="text-slate-500">Freight Cost:</span>
               <strong className="text-slate-900 font-black">{formatCurrency(transportCost)}</strong>
             </div>
             <div className="flex items-center justify-between gap-3">
@@ -133,7 +169,7 @@ export const LiveRouteMap = ({
         <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
           <button
             onClick={() => setShowTurnByTurn(!showTurnByTurn)}
-            className="w-full p-3.5 flex items-center justify-between text-xs font-bold text-slate-800 hover:bg-slate-50 transition-colors"
+            className="w-full p-3.5 flex items-center justify-between text-xs font-bold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <Navigation className="w-4 h-4 text-emerald-600" />
@@ -150,8 +186,8 @@ export const LiveRouteMap = ({
                     {idx + 1}
                   </div>
                   <div>
-                    <span className="font-bold text-slate-900 block">{step.distance}</span>
-                    <p className="text-slate-600 font-medium">{step.instruction}</p>
+                    <span className="text-[10px] font-bold text-slate-400 block">{step.distance}</span>
+                    <p className="text-slate-800 font-medium">{step.instruction}</p>
                   </div>
                 </div>
               ))}

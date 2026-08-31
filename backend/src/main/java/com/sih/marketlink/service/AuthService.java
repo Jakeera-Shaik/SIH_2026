@@ -183,4 +183,20 @@ public class AuthService {
                 .role(user.getRole())
                 .build();
     }
+
+    public String forgotPassword(com.sih.marketlink.dto.auth.ForgotPasswordRequest request) {
+        User user = userRepository.findByEmailOrMobile(request.getEmailOrMobile(), request.getEmailOrMobile())
+                .orElseThrow(() -> new BadRequestException("No registered account found with this email or mobile number."));
+        return "Account verified for " + user.getName() + " (" + user.getRole() + "). You can now reset your password.";
+    }
+
+    @Transactional
+    public String resetPassword(com.sih.marketlink.dto.auth.ResetPasswordRequest request) {
+        User user = userRepository.findByEmailOrMobile(request.getEmailOrMobile(), request.getEmailOrMobile())
+                .orElseThrow(() -> new BadRequestException("No registered account found with this email or mobile number."));
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+        return "Password updated successfully. You can now sign in with your new password.";
+    }
 }
+

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useFarmer } from '../../context/FarmerContext';
 import { useAuth } from '../../context/AuthContext';
 import recommendationService, { MAHARASHTRA_PRESET_LOCATIONS } from '../../services/recommendationService';
@@ -6,16 +7,16 @@ import locationService from '../../services/locationService';
 import liveDataStore from '../../services/liveDataStore';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Modal from '../../components/common/Modal';
-import { Sparkles, MapPin, CheckCircle2, Navigation, ExternalLink, Send, Building2 } from 'lucide-react';
+import { Sparkles, MapPin, CheckCircle2, Navigation, ExternalLink, Send, Building2, ArrowRight } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 
 export const Recommendations = () => {
   const { selectedCrop, farmerLocation, updateCrop, updateLocation } = useFarmer();
   const { user } = useAuth() || {};
 
-  const [crop, setCrop] = useState(selectedCrop.name || 'Onion');
-  const [variety, setVariety] = useState(selectedCrop.variety || 'Standard');
-  const [quantityKg, setQuantityKg] = useState(selectedCrop.quantityKg || 1500);
+  const [crop, setCrop] = useState(selectedCrop?.name || selectedCrop?.crop || 'Onion');
+  const [variety, setVariety] = useState(selectedCrop?.variety || 'Standard');
+  const [quantityKg, setQuantityKg] = useState(selectedCrop?.quantityKg || 1500);
   const [locationObj, setLocationObj] = useState(farmerLocation || { name: 'Amravati, Maharashtra' });
   
   const [detectingGps, setDetectingGps] = useState(false);
@@ -24,9 +25,9 @@ export const Recommendations = () => {
   const [selectedBuyerForOffer, setSelectedBuyerForOffer] = useState(null);
 
   useEffect(() => {
-    if (selectedCrop.name) setCrop(selectedCrop.name);
-    if (selectedCrop.variety) setVariety(selectedCrop.variety);
-    if (selectedCrop.quantityKg) setQuantityKg(selectedCrop.quantityKg);
+    if (selectedCrop?.name || selectedCrop?.crop) setCrop(selectedCrop?.name || selectedCrop?.crop);
+    if (selectedCrop?.variety) setVariety(selectedCrop.variety);
+    if (selectedCrop?.quantityKg) setQuantityKg(selectedCrop.quantityKg);
   }, [selectedCrop]);
 
   useEffect(() => {
@@ -78,15 +79,16 @@ export const Recommendations = () => {
     e.preventDefault();
     if (!selectedBuyerForOffer) return;
     const formData = new FormData(e.currentTarget);
-    const customRate = Number(formData.get('customRate')) || selectedCrop.expectedPrice || 6900;
+    const customRate = Number(formData.get('customRate')) || selectedCrop?.expectedPrice || 6900;
     const notes = formData.get('notes');
 
     liveDataStore.createOffer({
-      buyerId: selectedBuyerForOffer.id || 'm-2',
-      buyerName: selectedBuyerForOffer.name || 'Mandi Yard Official',
-      loginEmail: selectedBuyerForOffer.email || (selectedBuyerForOffer.name?.toLowerCase().includes('amravati') ? 'amravati@gmail.com' : 'nashik@gmail.com'),
+      cropLotId: selectedCrop?.id,
+      buyerId: selectedBuyerForOffer.id || selectedBuyerForOffer.mandiId,
+      buyerName: selectedBuyerForOffer.name || selectedBuyerForOffer.companyName || 'APMC Mandi Official',
+      loginEmail: selectedBuyerForOffer.email || selectedBuyerForOffer.loginEmail,
       farmerId: user?.id || 'f-1',
-      farmerName: user?.name || 'Shaik Shakeera',
+      farmerName: user?.name || 'Farmer',
       farmerEmail: user?.email || '',
       crop: crop,
       quantity: `${quantityKg} kg (${quantityKg / 100} Quintals)`,
@@ -97,7 +99,7 @@ export const Recommendations = () => {
     });
 
     setSelectedBuyerForOffer(null);
-    alert(`Trade request submitted successfully to ${selectedBuyerForOffer.name}! You can view discussion thread in My Offers & Negotiations.`);
+    alert(`Trade request submitted successfully to ${selectedBuyerForOffer.name || selectedBuyerForOffer.companyName || 'APMC Mandi Official'}! You can view discussion thread in My Offers & Negotiations.`);
   };
 
   return (
@@ -194,6 +196,30 @@ export const Recommendations = () => {
         </div>
       </div>
 
+      {/* Convenient Find Best Market Action Bar */}
+      <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white p-5 rounded-3xl shadow-lg border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-white/15 backdrop-blur-md text-amber-300 flex items-center justify-center shrink-0 border border-white/20 shadow-md">
+            <Sparkles className="w-6 h-6 text-amber-300 animate-pulse" />
+          </div>
+          <div>
+            <h4 className="text-base font-black text-white">Find Best Market for {crop} ({quantityKg} kg)</h4>
+            <p className="text-xs text-emerald-100 font-medium mt-0.5">
+              Calculate live APMC modal prices, freight transport costs, and net return rankings for <strong>{locationObj.name || 'your farm location'}</strong>.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={fetchRecommendations}
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 font-black text-xs px-6 py-3.5 rounded-2xl shadow-lg transition-all hover:scale-105 shrink-0 cursor-pointer"
+        >
+          <Sparkles className="w-4 h-4 text-slate-950" />
+          <span>Find Best Market</span>
+        </button>
+      </div>
+
       {loading ? (
         <LoadingSpinner message="Calculating dynamic freight distances & optimal net returns..." />
       ) : (
@@ -227,16 +253,7 @@ export const Recommendations = () => {
                       <h4 className={`text-xl font-black ${idx === 0 ? 'text-white' : 'text-slate-900'}`}>{market.name}</h4>
                       <span className={`text-xs flex items-center gap-1 mt-0.5 font-medium ${idx === 0 ? 'text-emerald-100' : 'text-slate-500'}`}>
                         <MapPin className={`w-3.5 h-3.5 ${idx === 0 ? 'text-emerald-300' : 'text-slate-400'}`} />
-                        {market.district}, {market.state} •{' '}
-                        <a
-                          href={googleMapsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline hover:opacity-80 font-bold inline-flex items-center gap-1"
-                        >
-                          <span>{market.distanceKm} km away</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
+                        {market.district}, {market.state} • {market.distanceKm} km away
                       </span>
                     </div>
                   </div>
@@ -251,17 +268,15 @@ export const Recommendations = () => {
                       </span>
                     </div>
 
-                    <a
-                      href={googleMapsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <Link
+                      to={`/farmer/markets/${market.id || 'm-2'}`}
                       className={`p-3 rounded-2xl border font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs ${
-                        idx === 0 ? 'bg-white text-emerald-900 border-white hover:bg-emerald-50' : 'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200'
+                        idx === 0 ? 'bg-white text-emerald-900 border-white hover:bg-emerald-50' : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white border-emerald-600'
                       }`}
                     >
-                      <Navigation className="w-4 h-4 text-emerald-700" />
-                      <span>Google Maps 🗺️</span>
-                    </a>
+                      <span>View Market Details</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
                   </div>
                 </div>
 
@@ -302,10 +317,12 @@ export const Recommendations = () => {
                   <button
                     type="button"
                     onClick={() => setSelectedBuyerForOffer({
-                      id: market.id || 'm-2',
+                      id: market.id,
                       name: market.name,
                       companyName: market.name,
-                      email: market.name.toLowerCase().includes('amravati') ? 'amravati@gmail.com' : 'nashik@gmail.com'
+                      email: market.email,
+                      district: market.district,
+                      state: market.state
                     })}
                     className="bg-emerald-950 hover:bg-slate-900 text-white text-xs font-extrabold px-4 py-2 rounded-xl shadow-md transition-all shrink-0 flex items-center gap-1.5 cursor-pointer"
                   >
@@ -345,7 +362,7 @@ export const Recommendations = () => {
               <input
                 type="number"
                 name="customRate"
-                defaultValue={selectedCrop.expectedPrice || 4170}
+                defaultValue={selectedCrop?.expectedPrice || 4170}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-black focus:outline-none focus:border-emerald-600"
               />
             </div>

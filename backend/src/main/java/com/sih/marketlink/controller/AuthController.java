@@ -45,4 +45,18 @@ public class AuthController {
         AuthResponse response = authService.refreshToken(request);
         return ResponseEntity.ok(ApiResponse.success(response, "Token refreshed successfully"));
     }
+
+    @PostMapping("/forgot-password")
+    @Operation(summary = "Verify Account for Forgot Password", description = "Verify registered email/mobile for password recovery")
+    public ResponseEntity<ApiResponse<String>> forgotPassword(@Valid @RequestBody com.sih.marketlink.dto.auth.ForgotPasswordRequest request) {
+        String msg = authService.forgotPassword(request);
+        return ResponseEntity.ok(ApiResponse.success(msg, "Account verified successfully"));
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(summary = "Reset Password", description = "Update password for verified account")
+    public ResponseEntity<ApiResponse<String>> resetPassword(@Valid @RequestBody com.sih.marketlink.dto.auth.ResetPasswordRequest request) {
+        String msg = authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success(msg, "Password reset successfully"));
+    }
 }

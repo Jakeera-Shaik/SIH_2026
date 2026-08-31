@@ -6,7 +6,12 @@ export const farmerService = {
   getProfile: async () => {
     if (USE_MOCK) {
       await new Promise((res) => setTimeout(res, 200));
-      const savedUser = JSON.parse(localStorage.getItem('agri_user') || '{}');
+      let savedUser = {};
+      try {
+        savedUser = JSON.parse(localStorage.getItem('agri_user') || '{}');
+      } catch {
+        savedUser = {};
+      }
       return {
         ...MOCK_FARMER_PROFILE,
         ...savedUser,
@@ -19,7 +24,12 @@ export const farmerService = {
   updateProfile: async (profileData) => {
     if (USE_MOCK) {
       await new Promise((res) => setTimeout(res, 200));
-      const currentUser = JSON.parse(localStorage.getItem('agri_user') || '{}');
+      let currentUser = {};
+      try {
+        currentUser = JSON.parse(localStorage.getItem('agri_user') || '{}');
+      } catch {
+        currentUser = {};
+      }
       const updated = { ...MOCK_FARMER_PROFILE, ...currentUser, ...profileData };
       localStorage.setItem('agri_user', JSON.stringify(updated));
       return updated;

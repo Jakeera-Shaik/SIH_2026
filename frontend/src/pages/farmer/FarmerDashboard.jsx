@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useFarmer } from '../../context/FarmerContext';
 import { useAuth } from '../../context/AuthContext';
-import liveDataStore, { getCropBenchmarkPrice } from '../../services/liveDataStore';
+import liveDataStore, { getCropBenchmarkPrice, OFFER_STATUS, TRADE_STATUS, CROP_STATUS } from '../../services/liveDataStore';
 import recommendationService, { MAHARASHTRA_PRESET_LOCATIONS } from '../../services/recommendationService';
 import locationService from '../../services/locationService';
 import priceService from '../../services/priceService';
@@ -11,6 +11,8 @@ import buyerService from '../../services/buyerService';
 import PriceChart from '../../components/dashboard/PriceChart';
 import Modal from '../../components/common/Modal';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import authService from '../../services/authService';
+import { formatCurrency } from '../../utils/formatters';
 
 import {
   Sprout,
@@ -30,33 +32,22 @@ import {
   Navigation,
   ExternalLink,
   DollarSign,
-  Award
+  Award,
+  History,
+  CheckCircle
 } from 'lucide-react';
-import { formatCurrency } from '../../utils/formatters';
-
 export const FarmerDashboard = () => {
   const { selectedCrop, farmerLocation, updateCrop, resetCrop, updateLocation } = useFarmer();
-  const { user } = useAuth() || {};
+  const auth = useAuth() || {};
+  const user = auth.user || authService.getCurrentUser();
   const navigate = useNavigate();
 
-  // If user hasn't registered any crop, default to null (No Active Crop)
-  const [activeCrop, setActiveCrop] = useState(selectedCrop && selectedCrop.name ? selectedCrop : null);
+  const [activeCrop, setActiveCrop] = useState(null);
   const [locationObj, setLocationObj] = useState(farmerLocation || { name: 'Amravati, Maharashtra' });
   const [detectingGps, setDetectingGps] = useState(false);
 
-  useEffect(() => {
-    if (selectedCrop && selectedCrop.name) {
-      setActiveCrop(selectedCrop);
-    } else {
-      setActiveCrop(null);
-    }
-  }, [selectedCrop]);
-
-  useEffect(() => {
-    if (farmerLocation) setLocationObj(farmerLocation);
-  }, [farmerLocation]);
-
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
   const [recommendation, setRecommendation] = useState(null);
   const [rankedMarkets, setRankedMarkets] = useState([]);
   const [historicalData, setHistoricalData] = useState([]);
@@ -64,10 +55,61 @@ export const FarmerDashboard = () => {
   const [buyers, setBuyers] = useState([]);
   const [chartRange, setChartRange] = useState('7d');
   const [allOffers, setAllOffers] = useState([]);
+  const [allTrades, setAllTrades] = useState([]);
 
   // Modals
   const [isAnalyzeOpen, setIsAnalyzeOpen] = useState(false);
   const [selectedBuyerForOffer, setSelectedBuyerForOffer] = useState(null);
+  const [submittingOffer, setSubmittingOffer] = useState(false);
+
+  // Sync active crop from central database
+  const refreshActiveCrop = () => {
+    // Check if cleared flag exists for this user session
+    const isCleared =
+      localStorage.getItem('agri_active_crop_cleared') === 'true' ||
+      (user?.id && localStorage.getItem(`agri_crop_cleared_${user.id}`) === 'true') ||
+      (user?.email && localStorage.getItem(`agri_crop_cleared_${user.email}`) === 'true');
+
+    if (isCleared) {
+      setActiveCrop(null);
+      resetCrop();
+      return;
+    }
+
+    const crops = liveDataStore.getCrops() || [];
+    const currentId = user?.id || '';
+    const currentEmail = (user?.email || '').toLowerCase();
+    const currentName = (user?.name || '').toLowerCase();
+
+    const farmerCrops = crops.filter(
+      (c) =>
+        (currentId && c.farmerId === currentId) ||
+        (currentEmail && c.farmerEmail?.toLowerCase() === currentEmail) ||
+        (currentName && c.farmerName?.toLowerCase() === currentName)
+    );
+
+    // Find latest active non-sold and non-archived crop
+    const activeLots = farmerCrops.filter(
+      (c) => c.status !== CROP_STATUS.SOLD && c.status !== 'Sold' && c.status !== 'Archived' && c.active !== false
+    );
+    const activeLot = activeLots.length > 0 ? activeLots[activeLots.length - 1] : null;
+
+    if (activeLot) {
+      setActiveCrop(activeLot);
+      updateCrop(activeLot);
+    } else {
+      setActiveCrop(null);
+      resetCrop();
+    }
+  };
+
+  useEffect(() => {
+    refreshActiveCrop();
+  }, [user?.id, user?.email, user?.name]);
+
+  useEffect(() => {
+    if (farmerLocation) setLocationObj(farmerLocation);
+  }, [farmerLocation]);
 
   // Filter offers STRICTLY for the currently logged-in farmer account
   const currentFarmerOffers = allOffers.filter((o) => {
@@ -85,32 +127,36 @@ export const FarmerDashboard = () => {
     return false;
   });
 
-  const completedOffersForCurrentFarmer = currentFarmerOffers.filter((o) => o.status === 'Completed');
+  const completedOffersForCurrentFarmer = currentFarmerOffers.filter(
+    (o) => o.status === 'Completed' || o.status === TRADE_STATUS.COMPLETED
+  );
 
-  const isCropCleared =
-    completedOffersForCurrentFarmer.length > 0 &&
-    typeof window !== 'undefined' &&
-    (localStorage.getItem(`agri_crop_cleared_${user?.id}`) === 'true' ||
-      localStorage.getItem(`agri_crop_cleared_${user?.email}`) === 'true');
-
-  const fetchDashboardData = async (targetCrop = activeCrop, targetLoc = locationObj) => {
-    if (!targetCrop || !targetCrop.name) return;
-
-    setLoading(true);
+  const fetchDashboardData = async (targetCrop = activeCrop, targetLoc = locationObj, isInitial = false) => {
+    if (isInitial) setLoading(true);
+    setErrorMessage('');
     try {
-      const liveOffers = liveDataStore.getOffers();
+      const liveOffers = liveDataStore.getOffers() || [];
+      const liveTrades = liveDataStore.getTrades() || [];
       setAllOffers(liveOffers);
+      setAllTrades(liveTrades);
+
+      if (!targetCrop || !targetCrop.crop) {
+        setLoading(false);
+        return;
+      }
+
+      const cropName = targetCrop.crop || targetCrop.name || 'Cotton';
 
       const [recoRes, priceRes, predRes, buyerRes] = await Promise.all([
         recommendationService.getBestMarkets({
-          crop: targetCrop.name,
+          crop: cropName,
           variety: targetCrop.variety || 'Standard',
           quantityKg: targetCrop.quantityKg || 1500,
           location: targetLoc?.name || 'Amravati, Maharashtra'
         }).catch(() => ({ topRecommendation: null, rankedMarkets: [] })),
-        priceService.getHistoricalPrices({ crop: targetCrop.name, period: chartRange }).catch(() => ({ chartData: [] })),
-        predictionService.getPricePrediction(targetCrop.name).catch(() => null),
-        buyerService.getMatchingBuyers({ crop: targetCrop.name }).catch(() => [])
+        priceService.getHistoricalPrices({ crop: cropName, period: chartRange }).catch(() => ({ chartData: [] })),
+        predictionService.getPricePrediction(cropName).catch(() => null),
+        buyerService.getMatchingBuyers({ crop: cropName }).catch(() => [])
       ]);
 
       const ranked = recoRes?.rankedMarkets || [];
@@ -123,22 +169,22 @@ export const FarmerDashboard = () => {
       setBuyers(buyerRes || []);
     } catch (err) {
       console.error('Error loading farmer dashboard:', err);
+      setErrorMessage('Unable to load market recommendations. Please retry.');
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (activeCrop && activeCrop.name) {
-      fetchDashboardData(activeCrop, locationObj);
-    }
+    refreshActiveCrop();
+    fetchDashboardData(activeCrop, locationObj, true);
+
     const unsubscribe = liveDataStore.subscribe(() => {
-      if (activeCrop && activeCrop.name) {
-        fetchDashboardData(activeCrop, locationObj);
-      }
+      refreshActiveCrop();
+      fetchDashboardData(activeCrop, locationObj, false);
     });
     return () => unsubscribe();
-  }, [activeCrop?.name, activeCrop?.quantityKg, activeCrop?.variety, locationObj?.name, chartRange, user?.id, user?.email]);
+  }, [activeCrop?.crop, activeCrop?.quantityKg, activeCrop?.variety, locationObj?.name, chartRange, user?.id, user?.email]);
 
   const handleLocationSelect = (presetId) => {
     const found = MAHARASHTRA_PRESET_LOCATIONS.find((l) => l.id === presetId || l.name === presetId);
@@ -172,71 +218,113 @@ export const FarmerDashboard = () => {
     const formEl = document.getElementById('register-crop-form') || e?.currentTarget?.closest('form');
     let name = 'Paddy';
     let qty = 1500;
-    let variety = 'Standard';
+    let variety = 'Standard Quality';
 
     if (formEl) {
       const formData = new FormData(formEl);
       name = formData.get('cropName') || 'Paddy';
       qty = Number(formData.get('quantityKg')) || 1500;
-      variety = formData.get('variety') || 'Standard';
+      variety = formData.get('variety') || 'Standard Quality';
     }
 
-    const rate = typeof getCropBenchmarkPrice === 'function'
-      ? getCropBenchmarkPrice(name)
-      : (liveDataStore.getCropBenchmarkPrice ? liveDataStore.getCropBenchmarkPrice(name) : 3000);
+    const rate = getCropBenchmarkPrice(name);
 
     const newCropObj = {
       name,
+      crop: name,
       variety,
       quantityKg: qty,
       expectedPrice: rate
     };
 
-    setActiveCrop(newCropObj);
-    updateCrop(newCropObj);
-    liveDataStore.registerCrop(newCropObj);
+    const registered = liveDataStore.registerCrop(newCropObj);
+    setActiveCrop(registered);
+    updateCrop(registered);
     setIsAnalyzeOpen(false);
-    fetchDashboardData(newCropObj, locationObj);
+    fetchDashboardData(registered, locationObj);
   };
 
   const handleCreateOffer = (e) => {
     e.preventDefault();
-    if (!selectedBuyerForOffer || !activeCrop) return;
-    const formData = new FormData(e.currentTarget);
-    const customRate = Number(formData.get('customRate')) || activeCrop.expectedPrice || 4170;
-    const notes = formData.get('notes');
+    if (!selectedBuyerForOffer || !activeCrop || submittingOffer) return;
+    setSubmittingOffer(true);
+    try {
+      const formData = new FormData(e.currentTarget);
+      const customRate = Number(formData.get('customRate')) || activeCrop.expectedPrice || 4170;
+      const notes = formData.get('notes');
+      const cropName = activeCrop.crop || activeCrop.name || 'Cotton';
 
-    liveDataStore.createOffer({
-      buyerId: selectedBuyerForOffer.id,
-      buyerName: selectedBuyerForOffer.name || selectedBuyerForOffer.companyName || 'Mandi Yard Official',
-      loginEmail: selectedBuyerForOffer.email || (selectedBuyerForOffer.name?.toLowerCase().includes('amravati') ? 'amravati@gmail.com' : 'nashik@gmail.com'),
-      farmerId: user?.id || 'f-1',
-      farmerName: user?.name || 'Shaik Shakeera',
-      farmerEmail: user?.email || '',
-      crop: activeCrop.name,
-      quantity: `${activeCrop.quantityKg} kg (${activeCrop.quantityKg / 100} Quintals)`,
-      offeredPricePerQuintal: customRate,
-      totalValue: (customRate * activeCrop.quantityKg) / 100,
-      netReturn: (customRate * activeCrop.quantityKg) / 100 - 3195,
-      notes: notes || `Farmer consignment request submitted for ${activeCrop.name} lot at ₹${customRate}/q.`
-    });
+      liveDataStore.createOffer({
+        cropLotId: activeCrop.id,
+        buyerId: selectedBuyerForOffer.id || selectedBuyerForOffer.mandiId,
+        buyerName: selectedBuyerForOffer.name || selectedBuyerForOffer.companyName || 'APMC Mandi Official',
+        loginEmail: selectedBuyerForOffer.email || selectedBuyerForOffer.loginEmail,
+        farmerId: user?.id || 'f-1',
+        farmerName: user?.name || 'Farmer',
+        farmerEmail: user?.email || '',
+        crop: cropName,
+        quantity: `${activeCrop.quantityKg} kg (${(activeCrop.quantityKg / 100).toFixed(1)} Quintals)`,
+        offeredPricePerQuintal: customRate,
+        totalValue: (customRate * activeCrop.quantityKg) / 100,
+        netReturn: (customRate * activeCrop.quantityKg) / 100 - 3000,
+        notes: notes || `Farmer consignment request submitted for ${cropName} lot at ₹${customRate}/q.`
+      });
 
-    setSelectedBuyerForOffer(null);
-    fetchDashboardData(activeCrop, locationObj);
+      setSelectedBuyerForOffer(null);
+      fetchDashboardData(activeCrop, locationObj);
+    } finally {
+      setSubmittingOffer(false);
+    }
   };
 
-  const activeRequestOffer = currentFarmerOffers.find(
-    (o) => o.status !== 'Completed' && !o.status?.includes('Declined') && !o.status?.includes('Superceded') && !o.status?.includes('Cancelled')
+  // Winning selected deal (must not be Completed)
+  const selectedDeal = currentFarmerOffers.find(
+    (o) =>
+      o.status !== 'Completed' &&
+      o.status !== TRADE_STATUS.COMPLETED &&
+      (o.status === OFFER_STATUS.ACCEPTED ||
+        o.status?.includes('Accepted') ||
+        o.status?.includes('Transit') ||
+        o.status?.includes('Dispatched'))
   );
 
-  const bestMandiOfferReceived = currentFarmerOffers.reduce((prev, curr) => {
-    if (curr.type !== 'received' || curr.status?.includes('Superceded') || curr.status?.includes('Declined')) return prev;
-    if (!prev) return curr;
-    return (curr.offeredPricePerQuintal || 0) > (prev.offeredPricePerQuintal || 0) ? curr : prev;
-  }, null);
+  const activeRequestOffer = !selectedDeal
+    ? currentFarmerOffers.find(
+        (o) =>
+          (o.type === 'sent' || o.status === 'Sent' || o.status === OFFER_STATUS.PENDING) &&
+          o.status !== 'Completed' &&
+          o.status !== TRADE_STATUS.COMPLETED &&
+          o.status !== OFFER_STATUS.SUPERSEDED &&
+          o.status !== OFFER_STATUS.CANCELLED &&
+          o.status !== OFFER_STATUS.REJECTED &&
+          !o.status?.includes('Declined')
+      )
+    : null;
+
+  const bestMandiOfferReceived = !selectedDeal
+    ? currentFarmerOffers.reduce((prev, curr) => {
+        if (
+          curr.type !== 'received' ||
+          curr.status === 'Completed' ||
+          curr.status === TRADE_STATUS.COMPLETED ||
+          curr.status === OFFER_STATUS.ACCEPTED ||
+          curr.status === OFFER_STATUS.SUPERSEDED ||
+          curr.status === OFFER_STATUS.CANCELLED ||
+          curr.status === OFFER_STATUS.REJECTED ||
+          curr.status?.includes('Declined')
+        )
+          return prev;
+        if (!prev) return curr;
+        return (curr.offeredPricePerQuintal || 0) > (prev.offeredPricePerQuintal || 0) ? curr : prev;
+      }, null)
+    : null;
 
   if (loading) {
     return <LoadingSpinner message="Calculating net profits across Maharashtra mandis..." />;
+  }
+
+  if (errorMessage) {
+    return <ErrorState message={errorMessage} onRetry={() => fetchDashboardData(activeCrop, locationObj, true)} />;
   }
 
   return (
@@ -266,24 +354,53 @@ export const FarmerDashboard = () => {
       </div>
 
       {/* CASE A: No Active Crop Registered */}
-      {!activeCrop || isCropCleared ? (
+      {!activeCrop ? (
         <div className="bg-white border border-slate-200/80 rounded-3xl p-8 shadow-sm text-center space-y-4">
           <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto border border-emerald-100 shadow-2xs">
-            <Sprout className="w-8 h-8" />
+            {completedOffersForCurrentFarmer.length > 0 ? (
+              <CheckCircle className="w-8 h-8 text-emerald-600" />
+            ) : (
+              <Sprout className="w-8 h-8" />
+            )}
           </div>
-          <div className="max-w-md mx-auto space-y-1">
-            <h2 className="text-xl font-black text-slate-900">No Active Crop Registered</h2>
-            <p className="text-xs text-slate-500 font-medium leading-relaxed">
-              You currently have no active crop registered. Please register your harvested crop lot to view live AI price recommendations, mandi net profit rankings, and connect with nearby APMC buyers.
-            </p>
+
+          <div className="max-w-md mx-auto space-y-2">
+            {completedOffersForCurrentFarmer.length > 0 ? (
+              <>
+                <h2 className="text-xl font-black text-slate-900">No Active Crops</h2>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  Your previous crop trade was successfully completed and settled. Your previous trades are available in Trade History. Register a new harvested crop lot to view live market prices.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-xl font-black text-slate-900">No Active Crop Registered</h2>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  You currently have no active crop registered. Please register your harvested crop lot to view live AI price recommendations, mandi net profit rankings, and connect with nearby APMC buyers.
+                </p>
+              </>
+            )}
           </div>
-          <button
-            onClick={() => setIsAnalyzeOpen(true)}
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs px-6 py-3 rounded-2xl shadow-md transition-all hover:scale-105 cursor-pointer"
-          >
-            <Sprout className="w-4 h-4" />
-            <span>+ Register Your Crop Lot</span>
-          </button>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => setIsAnalyzeOpen(true)}
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs px-6 py-3 rounded-2xl shadow-md transition-all hover:scale-105 cursor-pointer"
+            >
+              <Sprout className="w-4 h-4" />
+              <span>+ Register Your Crop Lot</span>
+            </button>
+
+            {completedOffersForCurrentFarmer.length > 0 && (
+              <Link
+                to="/farmer/buyers?tab=completed"
+                className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-xs px-6 py-3 rounded-2xl border border-slate-300 transition-all cursor-pointer"
+              >
+                <History className="w-4 h-4 text-emerald-600" />
+                <span>View Trade History ({completedOffersForCurrentFarmer.length})</span>
+              </Link>
+            )}
+          </div>
         </div>
       ) : (
         /* CASE B: Active Crop Lot Exists (Full Dashboard Layout) */
@@ -299,7 +416,7 @@ export const FarmerDashboard = () => {
                 </div>
               </div>
               <div>
-                <h3 className="text-xl font-black text-slate-900">{activeCrop.name} ({activeCrop.quantityKg} kg)</h3>
+                <h3 className="text-xl font-black text-slate-900">{activeCrop.crop || activeCrop.name} ({activeCrop.quantityKg} kg)</h3>
                 <span className="text-xs text-slate-500 font-medium">Variety: {activeCrop.variety || 'Standard'}</span>
               </div>
             </div>
@@ -363,7 +480,7 @@ export const FarmerDashboard = () => {
                   <span className="text-[10px] font-extrabold uppercase tracking-wider bg-emerald-200/60 text-emerald-900 px-2 py-0.5 rounded-md">
                     ACTIVE CROP LOT
                   </span>
-                  <span className="text-sm font-black text-slate-900">{activeCrop.name} — {activeCrop.variety}</span>
+                  <span className="text-sm font-black text-slate-900">{activeCrop.crop || activeCrop.name} — {activeCrop.variety}</span>
                 </div>
                 <span className="text-xs text-slate-600 font-medium mt-0.5 flex items-center gap-3">
                   <span>📦 {activeCrop.quantityKg} kg ({(activeCrop.quantityKg / 100).toFixed(1)} Quintals)</span>
@@ -373,16 +490,60 @@ export const FarmerDashboard = () => {
               </div>
             </div>
 
-            <button
-              onClick={() => setIsAnalyzeOpen(true)}
-              className="bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-2xs shrink-0 cursor-pointer"
-            >
-              Change Crop Parameters
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setIsAnalyzeOpen(true)}
+                className="bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-2xs shrink-0 cursor-pointer"
+              >
+                Change Crop Parameters
+              </button>
+              <Link
+                to="/farmer/recommendations"
+                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs px-4 py-2.5 rounded-xl transition-all shadow-md shrink-0 flex items-center gap-1.5 cursor-pointer hover:scale-105"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>Find Best Market</span>
+              </Link>
+            </div>
           </div>
 
+          {/* Winning Selected Deal Accepted Banner */}
+          {selectedDeal && (
+            <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 text-white p-5 rounded-3xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4 border border-emerald-500/30">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md text-emerald-300 flex items-center justify-center shrink-0 shadow-md">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-300" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-md text-emerald-100">
+                      ✓ DEAL MUTUALLY ACCEPTED (WINNING MANDI)
+                    </span>
+                    <span className="text-xs font-extrabold text-white">{selectedDeal.buyerName}</span>
+                  </div>
+                  <h3 className="text-base font-black text-white mt-0.5">
+                    Agreed Price: {formatCurrency(selectedDeal.offeredPricePerQuintal)}/q with {selectedDeal.buyerName}
+                  </h3>
+                  <p className="text-xs text-emerald-100 font-medium">
+                    Destination Mandi: <strong>{selectedDeal.buyerName}</strong> • Status: <strong>{selectedDeal.dispatched ? 'Freight Dispatched (In Transit)' : 'Accepted (Pending Logistics)'}</strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Link
+                  to="/farmer/offers?tab=accepted"
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs px-5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                  <span>{selectedDeal.dispatched ? 'View Freight Transit Status →' : 'Dispatch Freight Transport →'}</span>
+                </Link>
+              </div>
+            </div>
+          )}
+
           {/* Mandi Purchase Offer Received Notification */}
-          {bestMandiOfferReceived && (
+          {!selectedDeal && bestMandiOfferReceived && (
             <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 p-5 rounded-3xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4 border border-amber-300">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-slate-950 text-amber-400 flex items-center justify-center shrink-0 shadow-md">
@@ -406,8 +567,8 @@ export const FarmerDashboard = () => {
 
               <div className="flex items-center gap-2 shrink-0">
                 <Link
-                  to="/farmer/offers"
-                  className="bg-slate-950 hover:bg-slate-900 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-1.5"
+                  to="/farmer/offers?tab=received"
+                  className="bg-slate-950 hover:bg-slate-900 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                   <span>Review & Accept Mandi Offer →</span>
@@ -417,7 +578,7 @@ export const FarmerDashboard = () => {
           )}
 
           {/* Consignment Request Sent Notification */}
-          {activeRequestOffer && !bestMandiOfferReceived && (
+          {!selectedDeal && activeRequestOffer && !bestMandiOfferReceived && (
             <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 text-white p-5 rounded-3xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4 border border-emerald-500/30">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md text-amber-300 flex items-center justify-center shrink-0 shadow-md">
@@ -441,8 +602,8 @@ export const FarmerDashboard = () => {
 
               <div className="flex items-center gap-2 shrink-0">
                 <Link
-                  to="/farmer/offers"
-                  className="bg-white hover:bg-emerald-50 text-emerald-900 font-extrabold text-xs px-4 py-2 rounded-xl transition-all shadow-md flex items-center gap-1.5"
+                  to="/farmer/offers?tab=sent"
+                  className="bg-white hover:bg-emerald-50 text-emerald-900 font-extrabold text-xs px-4 py-2 rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
                 >
                   <MessageSquare className="w-4 h-4 text-emerald-700" />
                   <span>View Negotiation Chat →</span>
@@ -507,23 +668,25 @@ export const FarmerDashboard = () => {
 
               {/* Hero Actions */}
               <div className="flex flex-wrap items-center justify-end gap-3 pt-1">
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(locationObj.name || 'Amravati, Maharashtra')}&destination=${encodeURIComponent(recommendation.name + ', Maharashtra')}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  to={`/farmer/markets/${recommendation.id || recommendation.marketId || 'm-2'}`}
                   className="bg-white/15 hover:bg-white/25 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all border border-white/20 flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>View Market Details</span>
                   <ArrowRight className="w-3.5 h-3.5 text-emerald-300" />
-                </a>
+                </Link>
 
                 <button
-                  onClick={() => setSelectedBuyerForOffer({
-                    id: 'm-2',
-                    name: recommendation.name,
-                    companyName: recommendation.name,
-                    email: recommendation.name.toLowerCase().includes('amravati') ? 'amravati@gmail.com' : 'nashik@gmail.com'
-                  })}
+                  onClick={() =>
+                    setSelectedBuyerForOffer({
+                      id: recommendation.id || recommendation.marketId,
+                      name: recommendation.name || recommendation.marketName,
+                      companyName: recommendation.name || recommendation.marketName,
+                      email: recommendation.email || recommendation.loginEmail,
+                      district: recommendation.district,
+                      state: recommendation.state
+                    })
+                  }
                   className="bg-white text-emerald-900 hover:bg-emerald-50 font-black text-xs px-5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer hover:scale-105"
                 >
                   <Send className="w-3.5 h-3.5 text-emerald-700" />
@@ -539,7 +702,7 @@ export const FarmerDashboard = () => {
             <div className="lg:col-span-2">
               <PriceChart
                 data={historicalData}
-                title={`${activeCrop.name} 7-Day / 30-Day Price Trend`}
+                title={`${activeCrop.crop || activeCrop.name} 7-Day / 30-Day Price Trend`}
                 currentRange={chartRange}
                 onRangeChange={setChartRange}
               />
@@ -555,7 +718,7 @@ export const FarmerDashboard = () => {
                     </div>
                     <div>
                       <h3 className="font-extrabold text-slate-900 text-sm">AI Price Forecast</h3>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Predictive Intelligence for {activeCrop.name}</span>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Predictive Intelligence for {activeCrop.crop || activeCrop.name}</span>
                     </div>
                   </div>
                   <div className="text-right">
@@ -595,218 +758,93 @@ export const FarmerDashboard = () => {
               </p>
             </div>
           </div>
-
-          {/* Row 5: Top Nearby Mandis */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-black text-slate-900">Top Nearby Mandis</h2>
-                <p className="text-xs text-slate-500 font-medium">Ranked by highest net transport profit for {activeCrop.name}</p>
-              </div>
-              <Link to="/farmer/recommendations" className="text-xs text-emerald-700 font-extrabold hover:underline flex items-center gap-1">
-                <span>Compare All Markets</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {rankedMarkets.slice(0, 3).map((m, idx) => {
-                const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(locationObj.name || 'Amravati, Maharashtra')}&destination=${encodeURIComponent(m.name + ', Maharashtra')}`;
-
-                return (
-                  <div key={m.id || idx} className="bg-white border border-slate-200/80 rounded-3xl overflow-hidden shadow-sm hover:border-emerald-300 transition-all flex flex-col justify-between">
-                    {/* Visual Header Banner */}
-                    <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 text-white p-4 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-emerald-200 font-medium flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-emerald-300" />
-                          <span>{m.district || 'Maharashtra'} • {m.distanceKm || (idx + 1) * 8} km</span>
-                        </span>
-                        <span className="text-[10px] bg-emerald-500/40 text-emerald-100 font-bold px-2 py-0.5 rounded-full border border-emerald-400/30">
-                          +{(m.trendPercent || 3.5)}%
-                        </span>
-                      </div>
-                      <h3 className="font-black text-base text-white">{m.name}</h3>
-                      <span className="text-[10px] text-emerald-200 block">🕒 05:30 AM - 05:00 PM</span>
-                    </div>
-
-                    {/* Metrics */}
-                    <div className="p-4 space-y-3">
-                      <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-2xl border border-slate-100 text-xs">
-                        <div>
-                          <span className="text-[10px] text-slate-500 block font-medium">MODAL PRICE</span>
-                          <strong className="text-sm text-slate-900 font-black">{formatCurrency(m.modalPrice || 4170)}/q</strong>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-500 block font-medium">EST. NET RETURN</span>
-                          <strong className="text-sm text-emerald-700 font-black">{formatCurrency(m.netReturn || 60624)}</strong>
-                        </div>
-                      </div>
-
-                      <div className="text-[11px] text-slate-500 flex justify-between font-medium">
-                        <span>🚚 Freight: {formatCurrency(m.transportCost || 300)}</span>
-                        <span>📦 Arrival: {m.arrivalVolume || '14,000 Quintals'}</span>
-                      </div>
-
-                      <a
-                        href={googleMapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 rounded-xl transition-all text-center block shadow-2xs"
-                      >
-                        View Market Details →
-                      </a>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Row 6: Direct APMC Mandi Network */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-black text-slate-900">Direct APMC Mandi Network</h2>
-                <p className="text-xs text-slate-500 font-medium">High-intent APMC Mandi Procurement Yards procuring {activeCrop.name}</p>
-              </div>
-              <Link to="/farmer/recommendations" className="text-xs text-emerald-700 font-extrabold hover:underline flex items-center gap-1">
-                <span>View All Mandi Yards →</span>
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {buyers.map((buyer) => (
-                <div key={buyer.id} className="bg-white border border-slate-200/80 p-4 rounded-3xl shadow-sm hover:border-emerald-300 transition-all flex flex-col justify-between space-y-3">
-                  <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h3 className="font-black text-sm text-slate-900 leading-tight">{buyer.name || buyer.companyName}</h3>
-                        <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3 h-3 text-emerald-600" />
-                          {buyer.location} • {buyer.distanceKm} km
-                        </span>
-                      </div>
-                      <span className="text-[10px] bg-emerald-50 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
-                        Verified Buyer
-                      </span>
-                    </div>
-
-                    <div className="mt-3 bg-slate-50 p-2.5 rounded-2xl border border-slate-100 flex items-center justify-between text-xs">
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-medium">BENCHMARK PRICE</span>
-                        <strong className="text-sm font-black text-emerald-700">{formatCurrency(buyer.offeredPrice || 4170)}/q</strong>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[10px] text-slate-400 block font-medium">CROP</span>
-                        <strong className="text-xs font-bold text-slate-800">{buyer.targetCrop || activeCrop.name}</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    <a
-                      href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(locationObj.name || 'Amravati, Maharashtra')}&destination=${encodeURIComponent((buyer.name || 'APMC') + ', Maharashtra')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-2 rounded-xl text-center transition-colors"
-                    >
-                      View Details →
-                    </a>
-                    <button
-                      onClick={() => setSelectedBuyerForOffer(buyer)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2 rounded-xl transition-all shadow-2xs flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <Send className="w-3 h-3" />
-                      <span>Request Mandi</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </>
       )}
 
-      {/* Modal: Register / Change Crop Lot */}
-      <Modal isOpen={isAnalyzeOpen} onClose={() => setIsAnalyzeOpen(false)} title="Register Crop Lot">
-        <form id="register-crop-form" onSubmit={handleRegisterCropSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Select Crop</label>
-            <select
-              name="cropName"
-              defaultValue={activeCrop?.name || 'Paddy'}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
-            >
-              <option value="Paddy">Paddy / Rice</option>
-              <option value="Cotton">Cotton (Kapas)</option>
-              <option value="Chilli">Dry Red Chilli</option>
-              <option value="Onion">Onion (Red)</option>
-              <option value="Tomato">Tomato</option>
-              <option value="Wheat">Wheat</option>
-              <option value="Potato">Potato</option>
-              <option value="Maize">Maize (Corn)</option>
-            </select>
-          </div>
+      {/* Modal: Register Crop Lot */}
+      {isAnalyzeOpen && (
+        <Modal
+          isOpen={isAnalyzeOpen}
+          onClose={() => setIsAnalyzeOpen(false)}
+          title="Register Harvested Crop Lot"
+        >
+          <form id="register-crop-form" onSubmit={handleRegisterCropSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Select Crop</label>
+              <select
+                name="cropName"
+                defaultValue={activeCrop?.crop || activeCrop?.name || 'Paddy'}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-medium focus:outline-none focus:border-emerald-600"
+              >
+                <option value="Cotton">Cotton (Kapus)</option>
+                <option value="Paddy">Paddy (Dhan/Rice)</option>
+                <option value="Chilli">Dry Red Chilli (Mirchi)</option>
+                <option value="Onion">Onion (Kanda)</option>
+                <option value="Tomato">Tomato</option>
+                <option value="Wheat">Wheat (Gehu)</option>
+                <option value="Potato">Potato (Batata)</option>
+                <option value="Maize">Maize (Makka)</option>
+              </select>
+            </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Variety</label>
-            <input
-              type="text"
-              name="variety"
-              defaultValue={activeCrop?.variety || 'Standard'}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-bold focus:outline-none focus:border-emerald-600"
-            />
-          </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Variety / Grade</label>
+              <input
+                type="text"
+                name="variety"
+                defaultValue={activeCrop?.variety || 'Standard Quality'}
+                placeholder="e.g. Desi Cotton / Hybrid Red / Grade A"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-medium focus:outline-none focus:border-emerald-600"
+              />
+            </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Harvest Quantity (in Kilograms)</label>
-            <input
-              type="number"
-              name="quantityKg"
-              defaultValue={activeCrop?.quantityKg || 1500}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-bold focus:outline-none focus:border-emerald-600"
-            />
-            <span className="text-[11px] text-slate-500 mt-1 block font-medium">
-              100 kg = 1 Quintal (e.g. 1500 kg = 15 Quintals)
-            </span>
-          </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Harvested Quantity (Kg)</label>
+              <input
+                type="number"
+                name="quantityKg"
+                defaultValue={activeCrop?.quantityKg || 1500}
+                placeholder="1500"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-bold focus:outline-none focus:border-emerald-600"
+              />
+              <span className="text-[11px] text-slate-500 mt-1 block">1500 kg = 15 Quintals</span>
+            </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => setIsAnalyzeOpen(false)}
-              className="px-4 py-2 text-xs text-slate-600 hover:text-slate-900 rounded-xl bg-slate-100 font-semibold"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer hover:scale-105"
-            >
-              <Sprout className="w-4 h-4" />
-              <span>Submit & Save</span>
-            </button>
-          </div>
-        </form>
-      </Modal>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsAnalyzeOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                Publish & Save Crop Lot
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
-      {/* Modal: Request Offer from Specific Buyer */}
-      {selectedBuyerForOffer && activeCrop && (
+      {/* Modal: Request Mandi Consignment */}
+      {selectedBuyerForOffer && (
         <Modal
           isOpen={!!selectedBuyerForOffer}
           onClose={() => setSelectedBuyerForOffer(null)}
-          title={`Request Offer from ${selectedBuyerForOffer.name || selectedBuyerForOffer.companyName}`}
+          title={`Send Consignment Request to ${selectedBuyerForOffer.name}`}
         >
           <form onSubmit={handleCreateOffer} className="space-y-4">
-            <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl text-xs font-medium space-y-1">
+            <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-2xl text-xs font-medium space-y-1 text-emerald-950">
               <div className="flex justify-between">
-                <span>Selected Mandi Buyer:</span>
-                <strong className="text-slate-900 font-bold">{selectedBuyerForOffer.name || selectedBuyerForOffer.companyName}</strong>
+                <span>Target Mandi Yard:</span>
+                <strong className="text-slate-900 font-bold">{selectedBuyerForOffer.name}</strong>
               </div>
               <div className="flex justify-between">
                 <span>Crop Lot:</span>
-                <strong className="text-emerald-800 font-bold">{activeCrop.name} ({activeCrop.quantityKg} kg / {activeCrop.quantityKg / 100} Quintals)</strong>
+                <strong className="text-emerald-800 font-bold">{activeCrop?.crop || activeCrop?.name} ({activeCrop?.quantityKg} kg)</strong>
               </div>
             </div>
 
@@ -817,19 +855,19 @@ export const FarmerDashboard = () => {
               <input
                 type="number"
                 name="customRate"
-                defaultValue={activeCrop.expectedPrice || 4170}
+                defaultValue={recommendation?.modalPrice || 4170}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-black focus:outline-none focus:border-emerald-600"
               />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                Notes / Terms for Mandi Official
+                Message / Consignment Instructions
               </label>
               <textarea
                 name="notes"
+                defaultValue={`Farmer consignment request for ${activeCrop?.crop || activeCrop?.name} lot (${activeCrop?.quantityKg} kg). Will arrange freight dispatch upon approval.`}
                 rows={3}
-                placeholder="e.g. Grade A premium quality lot ready for immediate gate delivery..."
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs text-slate-900 font-medium focus:outline-none focus:border-emerald-600"
               ></textarea>
             </div>
@@ -838,16 +876,17 @@ export const FarmerDashboard = () => {
               <button
                 type="button"
                 onClick={() => setSelectedBuyerForOffer(null)}
-                className="px-4 py-2 text-xs text-slate-600 hover:text-slate-900 rounded-xl bg-slate-100 font-semibold"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
+                disabled={submittingOffer}
                 className="px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>Submit Trade Request</span>
+                <span>{submittingOffer ? 'Sending...' : 'Send Consignment Request'}</span>
               </button>
             </div>
           </form>

@@ -1,26 +1,27 @@
 import apiClient, { USE_MOCK } from './api';
+import centralDatabase from './centralDatabase';
 
 const MAHARASHTRA_MANDI_DIRECTORY = [
-  { id: 'm-1', name: 'Lasalgaon APMC (Asia\'s Largest Mandi)', district: 'Nashik', state: 'Maharashtra', operatingHours: '05:00 AM - 05:00 PM' },
-  { id: 'm-2', name: 'Nashik APMC (Dindori Road)', district: 'Nashik', state: 'Maharashtra', operatingHours: '06:00 AM - 04:00 PM' },
-  { id: 'm-3', name: 'Pimplegaon Baswant APMC', district: 'Nashik', state: 'Maharashtra', operatingHours: '05:30 AM - 05:00 PM' },
-  { id: 'm-4', name: 'Pune APMC (Gultekdi Market Yard)', district: 'Pune', state: 'Maharashtra', operatingHours: '04:30 AM - 06:00 PM' },
-  { id: 'm-5', name: 'Mumbai Vashi APMC (Terminal Wholesale)', district: 'Thane', state: 'Maharashtra', operatingHours: '04:00 AM - 07:00 PM' },
-  { id: 'm-6', name: 'Nagpur APMC (Kalamna Market)', district: 'Nagpur', state: 'Maharashtra', operatingHours: '06:00 AM - 05:00 PM' },
-  { id: 'm-7', name: 'Solapur APMC', district: 'Solapur', state: 'Maharashtra', operatingHours: '06:00 AM - 04:00 PM' },
-  { id: 'm-8', name: 'Kolhapur APMC (Shahupuri)', district: 'Kolhapur', state: 'Maharashtra', operatingHours: '05:00 AM - 05:00 PM' },
-  { id: 'm-9', name: 'Ahmednagar APMC', district: 'Ahmednagar', state: 'Maharashtra', operatingHours: '06:00 AM - 04:30 PM' },
-  { id: 'm-10', name: 'Jalgaon APMC', district: 'Jalgaon', state: 'Maharashtra', operatingHours: '06:00 AM - 05:00 PM' },
-  { id: 'm-11', name: 'Amravati APMC', district: 'Amravati', state: 'Maharashtra', operatingHours: '05:30 AM - 04:30 PM' },
-  { id: 'm-12', name: 'Latur APMC (Pulses & Grain Hub)', district: 'Latur', state: 'Maharashtra', operatingHours: '05:00 AM - 06:00 PM' },
-  { id: 'm-13', name: 'Nanded APMC', district: 'Nanded', state: 'Maharashtra', operatingHours: '06:00 AM - 05:00 PM' },
-  { id: 'm-14', name: 'Chhatrapati Sambhajinagar (Aurangabad) APMC', district: 'Aurangabad', state: 'Maharashtra', operatingHours: '06:00 AM - 04:30 PM' },
-  { id: 'm-15', name: 'Baramati APMC', district: 'Pune', state: 'Maharashtra', operatingHours: '05:30 AM - 05:00 PM' },
-  { id: 'm-16', name: 'Sangli APMC (Turmeric & Spices Hub)', district: 'Sangli', state: 'Maharashtra', operatingHours: '05:00 AM - 05:00 PM' },
-  { id: 'm-17', name: 'Akola APMC (Cotton & Pulses Hub)', district: 'Akola', state: 'Maharashtra', operatingHours: '06:00 AM - 04:30 PM' },
-  { id: 'm-18', name: 'Yavatmal APMC (White Gold Cotton Market)', district: 'Yavatmal', state: 'Maharashtra', operatingHours: '06:00 AM - 05:00 PM' },
-  { id: 'm-19', name: 'Satara APMC', district: 'Satara', state: 'Maharashtra', operatingHours: '05:30 AM - 04:30 PM' },
-  { id: 'm-20', name: 'Dhule APMC', district: 'Dhule', state: 'Maharashtra', operatingHours: '06:00 AM - 05:00 PM' }
+  { id: 'm-1', name: 'Lasalgaon APMC (Asia\'s Largest Mandi)', district: 'Nashik', state: 'Maharashtra', email: 'lasalgaon@gmail.com', operatingHours: '05:00 AM - 05:00 PM' },
+  { id: 'm-2', name: 'Nashik APMC (Dindori Road)', district: 'Nashik', state: 'Maharashtra', email: 'nashik@gmail.com', operatingHours: '06:00 AM - 04:00 PM' },
+  { id: 'm-3', name: 'Pimplegaon Baswant APMC', district: 'Nashik', state: 'Maharashtra', email: 'pimplegaon@gmail.com', operatingHours: '05:30 AM - 05:00 PM' },
+  { id: 'm-4', name: 'Pune APMC (Gultekdi Market Yard)', district: 'Pune', state: 'Maharashtra', email: 'pune@gmail.com', operatingHours: '04:30 AM - 06:00 PM' },
+  { id: 'm-5', name: 'Mumbai Vashi APMC (Terminal Wholesale)', district: 'Thane', state: 'Maharashtra', email: 'vashi@gmail.com', operatingHours: '04:00 AM - 07:00 PM' },
+  { id: 'm-6', name: 'Nagpur APMC (Kalamna Market)', district: 'Nagpur', state: 'Maharashtra', email: 'nagpur@gmail.com', operatingHours: '06:00 AM - 05:00 PM' },
+  { id: 'm-7', name: 'Solapur APMC', district: 'Solapur', state: 'Maharashtra', email: 'solapur@gmail.com', operatingHours: '06:00 AM - 04:00 PM' },
+  { id: 'm-8', name: 'Kolhapur APMC (Shahupuri)', district: 'Kolhapur', state: 'Maharashtra', email: 'kolhapur@gmail.com', operatingHours: '05:00 AM - 05:00 PM' },
+  { id: 'm-9', name: 'Ahmednagar APMC', district: 'Ahmednagar', state: 'Maharashtra', email: 'ahmednagar@gmail.com', operatingHours: '06:00 AM - 04:30 PM' },
+  { id: 'm-10', name: 'Jalgaon APMC', district: 'Jalgaon', state: 'Maharashtra', email: 'jalgaon@gmail.com', operatingHours: '06:00 AM - 05:00 PM' },
+  { id: 'm-11', name: 'Amravati APMC', district: 'Amravati', state: 'Maharashtra', email: 'amravati@gmail.com', operatingHours: '05:30 AM - 04:30 PM' },
+  { id: 'm-12', name: 'Latur APMC (Pulses & Grain Hub)', district: 'Latur', state: 'Maharashtra', email: 'latur@gmail.com', operatingHours: '05:00 AM - 06:00 PM' },
+  { id: 'm-13', name: 'Nanded APMC', district: 'Nanded', state: 'Maharashtra', email: 'nanded@gmail.com', operatingHours: '06:00 AM - 05:00 PM' },
+  { id: 'm-14', name: 'Chhatrapati Sambhajinagar (Aurangabad) APMC', district: 'Aurangabad', state: 'Maharashtra', email: 'aurangabad@gmail.com', operatingHours: '06:00 AM - 04:30 PM' },
+  { id: 'm-15', name: 'Baramati APMC', district: 'Pune', state: 'Maharashtra', email: 'baramati@gmail.com', operatingHours: '05:30 AM - 05:00 PM' },
+  { id: 'm-16', name: 'Sangli APMC (Turmeric & Spices Hub)', district: 'Sangli', state: 'Maharashtra', email: 'sangli@gmail.com', operatingHours: '05:00 AM - 05:00 PM' },
+  { id: 'm-17', name: 'Akola APMC (Cotton & Pulses Hub)', district: 'Akola', state: 'Maharashtra', email: 'akola@gmail.com', operatingHours: '06:00 AM - 04:30 PM' },
+  { id: 'm-18', name: 'Yavatmal APMC (White Gold Cotton Market)', district: 'Yavatmal', state: 'Maharashtra', email: 'yavatmal@gmail.com', operatingHours: '06:00 AM - 05:00 PM' },
+  { id: 'm-19', name: 'Satara APMC', district: 'Satara', state: 'Maharashtra', email: 'satara@gmail.com', operatingHours: '05:30 AM - 04:30 PM' },
+  { id: 'm-20', name: 'Dhule APMC', district: 'Dhule', state: 'Maharashtra', email: 'dhule@gmail.com', operatingHours: '06:00 AM - 05:00 PM' }
 ];
 
 const CROP_PRICE_BENCHMARKS = {
@@ -76,26 +77,28 @@ export function normalizeCropName(cropStr) {
 function generateLiveMandiRecords(cropName = 'All') {
   const normCrop = normalizeCropName(cropName);
   const filterBySingleCrop = normCrop !== 'All' && CROP_PRICE_BENCHMARKS[normCrop];
+  const customMandis = centralDatabase.getMandis() || [];
+  const fullDirectory = [...MAHARASHTRA_MANDI_DIRECTORY, ...customMandis];
 
-  return MAHARASHTRA_MANDI_DIRECTORY.map((mandi, idx) => {
+  return fullDirectory.map((mandi, idx) => {
     const targetCrop = filterBySingleCrop
       ? normCrop
-      : MANDI_NATIVE_CROPS[mandi.id] || 'Onion';
+      : mandi.commodity || MANDI_NATIVE_CROPS[mandi.id] || 'Onion';
 
     const benchmark = CROP_PRICE_BENCHMARKS[targetCrop] || CROP_PRICE_BENCHMARKS['Onion'];
     const priceModifier = ((idx * 37) % 250) - 100;
-    const modalPrice = Math.max(1500, benchmark.basePrice + priceModifier);
-    const minPrice = Math.max(1200, modalPrice - 250);
-    const maxPrice = modalPrice + 350;
+    const modalPrice = mandi.modalPrice || Math.max(1500, benchmark.basePrice + priceModifier);
+    const minPrice = mandi.minPrice || Math.max(1200, modalPrice - 250);
+    const maxPrice = mandi.maxPrice || (modalPrice + 350);
 
     return {
       ...mandi,
       commodity: targetCrop,
-      variety: benchmark.variety,
+      variety: mandi.variety || benchmark.variety,
       minPrice,
       maxPrice,
       modalPrice,
-      arrivalQty: benchmark.arrival,
+      arrivalQty: mandi.arrivalQty || benchmark.arrival,
       trend: idx % 3 === 0 ? 'up' : 'stable',
       trendPercent: Number((((idx * 7) % 40) / 10 + 1.2).toFixed(1)),
       commissionPercent: 2,

@@ -7,8 +7,8 @@ import { Calculator, DollarSign, Truck } from 'lucide-react';
 export const ProfitCalculator = () => {
   const { selectedCrop, updateCrop } = useFarmer();
 
-  const [crop, setCrop] = useState(selectedCrop.name || 'Onion');
-  const [quantityKg, setQuantityKg] = useState(selectedCrop.quantityKg || 1000);
+  const [crop, setCrop] = useState(selectedCrop?.name || selectedCrop?.crop || 'Onion');
+  const [quantityKg, setQuantityKg] = useState(selectedCrop?.quantityKg || 1000);
   const [pricePerQuintal, setPricePerQuintal] = useState(3200);
   const [transportCost, setTransportCost] = useState(900);
   const [handlingCost, setHandlingCost] = useState(300);
@@ -17,8 +17,8 @@ export const ProfitCalculator = () => {
   const [miscCost, setMiscCost] = useState(100);
 
   useEffect(() => {
-    if (selectedCrop.name) setCrop(selectedCrop.name);
-    if (selectedCrop.quantityKg) setQuantityKg(selectedCrop.quantityKg);
+    if (selectedCrop?.name || selectedCrop?.crop) setCrop(selectedCrop?.name || selectedCrop?.crop);
+    if (selectedCrop?.quantityKg) setQuantityKg(selectedCrop.quantityKg);
   }, [selectedCrop]);
 
   const handleCropChange = (e) => {
